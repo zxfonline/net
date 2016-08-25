@@ -1,0 +1,14 @@
+{
+	//服务器消息执行并发线程数
+	"MultipleSize":1,
+	//服务器消息线程消息管道缓冲上限
+	"MultipleChanSize":10000,
+	//连接管道读取数据缓冲大小
+	"ChanReadSize":16,
+	//连接管道发送数据缓冲大小
+	"ChanSendSize":10000,
+	//消息包最大字节数,0表示无上限
+	"ReadBufMaxSize":20480,
+	//连接空闲超时时间 秒 0 表示不做超时断开
+	"DeadlineSecond":180
+}
