@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/zxfonline/chanutil"
-	"github.com/zxfonline/context"
 	"github.com/zxfonline/golog"
 	"github.com/zxfonline/shutdown"
 	"github.com/zxfonline/taskexcutor"
 	"github.com/zxfonline/timefix"
+	"golang.org/x/net/context"
 )
 
 var (

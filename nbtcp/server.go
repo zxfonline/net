@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/zxfonline/chanutil"
-	"github.com/zxfonline/context"
 	"github.com/zxfonline/golog"
 	"github.com/zxfonline/taskexcutor"
+	"golang.org/x/net/context"
 )
 
 var (
