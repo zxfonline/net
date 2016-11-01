@@ -11,10 +11,13 @@ import (
 	"io"
 	"time"
 
+	"context"
+
 	"github.com/zxfonline/chanutil"
 	"github.com/zxfonline/golog"
 	"github.com/zxfonline/taskexcutor"
-	"golang.org/x/net/context"
+	. "github.com/zxfonline/trace"
+	"golang.org/x/net/trace"
 )
 
 var (
@@ -42,6 +45,7 @@ type Server struct {
 	l                net.Listener
 	quitF            context.CancelFunc
 	stopD            chanutil.DoneChan
+	events           trace.EventLog
 }
 
 //初始化tcp服务器
@@ -55,6 +59,9 @@ func NewServer(wg *sync.WaitGroup, config *ServerConfig, msgProcessor MsgHandler
 		wg:               wg,
 		address:          address,
 	}
+	if EnableTracing {
+		s.events = trace.NewEventLog("tcp.Server", address)
+	}
 	return s
 }
 
@@ -67,6 +74,7 @@ func (s *Server) working(ctx context.Context, msgExcutor taskexcutor.Excutor) {
 		if !s.Closed() {
 			if e := recover(); e != nil {
 				serverLogger.Errorf("recover error:%v", e)
+				s.TraceErrorf("working err:%v", e)
 			}
 			//尝试重连
 			err := s.startListener(MAXN_RETRY_TIMES)
@@ -88,6 +96,7 @@ func (s *Server) accept(ctx context.Context, msgExcutor taskexcutor.Excutor) {
 	for q := false; !q; {
 		c, err := s.l.Accept()
 		if err != nil {
+			s.TraceErrorf("done serving; Accept = %v", err)
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
 				if tempDelay == 0 {
 					tempDelay = 5 * time.Millisecond
@@ -122,6 +131,7 @@ func (s *Server) startListener(trytime int) error {
 		}
 		s.l = l
 		serverLogger.Infof("tcp serving %s", l.Addr())
+		s.TracePrintf("serving")
 		return nil
 	}()
 	if err != nil {
@@ -162,11 +172,30 @@ func (s *Server) Close() {
 		s.l = nil
 		s.quitF()
 		serverLogger.Infof("STOPED %+v", s)
+		s.TracePrintf("server closed")
 		s.wg.Done()
+		if s.events != nil {
+			s.events.Finish()
+			s.events = nil
+		}
 	})
 }
 
 //是否关闭
 func (s *Server) Closed() bool {
 	return s.stopD.R().Done()
+}
+
+// printf records an event in s's event log, unless s has been stopped.
+func (s *Server) TracePrintf(format string, a ...interface{}) {
+	if s.events != nil {
+		s.events.Printf(format, a...)
+	}
+}
+
+// errorf records an error in s's event log, unless s has been stopped.
+func (s *Server) TraceErrorf(format string, a ...interface{}) {
+	if s.events != nil {
+		s.events.Errorf(format, a...)
+	}
 }

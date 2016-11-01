@@ -10,23 +10,35 @@ import (
 	"math"
 	"time"
 
+	"sync/atomic"
+
 	"github.com/zxfonline/buffpool"
 	"github.com/zxfonline/net/nbtcp"
 	"github.com/zxfonline/timefix"
+	. "github.com/zxfonline/trace"
+	"golang.org/x/net/trace"
 )
 
 //默认字节序 大端法
 var DefaultEndian = binary.BigEndian
 
+//消息唯一id生成器
+var uuid int64
+
+//构建消息唯一id
+func createUuid() int64 {
+	return atomic.AddInt64(&uuid, 1)
+}
+
 func NewBuffer(port int32, buf []byte) nbtcp.IoBuffer {
-	b := &nbuffer{port: port, buf: bytes.NewBuffer(buf)}
+	b := &nbuffer{port: port, buf: bytes.NewBuffer(buf), uuid: createUuid()}
 	return b
 }
 
 func NewCapBuffer(port int32, caps int) nbtcp.IoBuffer {
 	buf := buffpool.BufGet(caps)
 	buf = buf[:0]
-	b := &nbuffer{port: port, buf: bytes.NewBuffer(buf)}
+	b := &nbuffer{port: port, buf: bytes.NewBuffer(buf), uuid: createUuid()}
 	return b
 }
 
@@ -39,6 +51,8 @@ type nbuffer struct {
 	rcvt      int64 //收到消息的时间
 	prct      int64 //开始处理时间
 	post      int64 //消息处理完成/发送时间
+	tr        trace.Trace
+	uuid      int64 //消息唯一id
 }
 
 func (nb *nbuffer) GetRcvt() int64 {
@@ -350,6 +364,42 @@ func (nb *nbuffer) WriteFloat64(n float64) {
 	x := math.Float64bits(n)
 	nb.WriteUint64(x)
 }
+
+func (nb *nbuffer) RegistTraceInfo(tr trace.Trace) {
+	if EnableTracing && nb.tr == nil {
+		nb.tr = tr
+	}
+}
+func (nb *nbuffer) TraceInfo() trace.Trace {
+	return nb.tr
+}
+
+func (nb *nbuffer) TracePrintf(format string, a ...interface{}) {
+	if nb.tr != nil {
+		nb.tr.LazyPrintf(format, a...)
+	}
+}
+
+func (nb *nbuffer) TraceErrorf(format string, a ...interface{}) {
+	if nb.tr != nil {
+		nb.tr.LazyPrintf(format, a...)
+		nb.tr.SetError()
+	}
+}
+func (nb *nbuffer) TraceFinish() {
+	if nb.tr != nil {
+		nb.tr.Finish()
+		nb.tr = nil
+	}
+}
+
+func (nb *nbuffer) Uuid() int64 {
+	return nb.uuid
+}
+func (nb *nbuffer) SetUuid(uuid int64) {
+	nb.uuid = uuid
+}
+
 func (nb *nbuffer) String() string {
 	post := nb.GetPost()
 	if post == 0 {
@@ -367,11 +417,9 @@ func (nb *nbuffer) String() string {
 			tt1 := time.Duration(post - prct)
 			return fmt.Sprintf("req:%v ask:%v  wait:%v  proc:%v  cost:%v", nb.RcvPort(), nb.Port(), tt2, tt1, tt3)
 		} else {
-			//消息包等待耗时
-			tt2 := time.Duration(prct - rcvt)
 			//消息包处理耗时
 			tt1 := time.Duration(post - prct)
-			return fmt.Sprintf("req:%v ask:%v  wait:%v  proc:%v", nb.RcvPort(), nb.Port(), tt2, tt1)
+			return fmt.Sprintf("req:%v ask:%v  cost:%v", nb.RcvPort(), nb.Port(), tt1)
 		}
 	} else if rcvt > 0 {
 		//消息包总耗时

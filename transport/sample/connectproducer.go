@@ -11,7 +11,7 @@ import (
 	"github.com/zxfonline/net/transport"
 )
 
-func main() {
+func main1() {
 	producer := transport.NewTimerTcpConnectProducer("test", nil, "127.0.0.1:8888")
 	producer.TimeFixStart(timer.GTimer, 3*time.Second)
 	ch := make(chan os.Signal)

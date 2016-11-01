@@ -5,6 +5,8 @@ package nbtcp
 
 import (
 	"net"
+
+	"golang.org/x/net/trace"
 )
 
 //消息处理器
@@ -90,6 +92,9 @@ type IoBuffer interface {
 	//消息包接收类型，初次创建消息包传入的数据包类型
 	RcvPort() int32
 	SetRcvPort(int32)
+	//消息唯一id
+	Uuid() int64
+	SetUuid(int64)
 	//是否放入数组缓存
 	Cached() bool
 	//发送完缓存数据数据
@@ -138,4 +143,9 @@ type IoBuffer interface {
 	WriteFloat32(float32)
 	WriteFloat64(float64)
 	String() string
+	RegistTraceInfo(trace.Trace)
+	TraceInfo() trace.Trace
+	TracePrintf(format string, a ...interface{})
+	TraceErrorf(format string, a ...interface{})
+	TraceFinish()
 }

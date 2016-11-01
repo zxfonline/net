@@ -4,15 +4,20 @@
 package transport
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/zxfonline/timefix"
 
 	"github.com/zxfonline/gerror"
 	"github.com/zxfonline/golog"
 	"github.com/zxfonline/net/nbtcp"
 	"github.com/zxfonline/taskexcutor"
 	"github.com/zxfonline/timer"
+	. "github.com/zxfonline/trace"
+	"golang.org/x/net/trace"
 )
 
 var (
@@ -45,33 +50,44 @@ func NewAccessHandler(port int32, actimer *timer.Timer) *AccessHandler {
 	h.Handler = func(session nbtcp.IoSession, data nbtcp.IoBuffer) {
 		mid := data.ReadInt64()
 		port := data.ReadInt32()
-		pb := NewBuffer(port, data.Bytes())
 		h.lock.RLock()
 		if e, ok := h.entryMap[mid]; ok {
 			h.lock.RUnlock()
 			if mid > 0 {
+				pb := NewBuffer(port, data.Bytes())
+				pb.SetRcvPort(port)
+				pb.SetRcvt(data.GetRcvt())
+				pb.SetPrct(data.GetPrct())
 				select {
 				case e.waitChan <- pb:
 				default:
 				}
+				data.TracePrintf("sync proxy callback post ok, port:%d, mid:%d", port, mid)
 			} else if mid < 0 {
 				h.lock.Lock()
 				delete(h.entryMap, mid)
 				h.lock.Unlock()
-				if e.data == nil {
+				if e.session == nil {
+					data.TraceErrorf("async proxy callback timeout, port:%d, mid:%d", port, mid)
 					return
+				} else {
+					data.TracePrintf("async proxy callback, port:%d, mid:%d", port, mid)
 				}
-				pb.SetConnectID(e.data.ConnectID())
 				var err error
-				pb, err = e.parseData(pb)
+				_, err = e.parseData(data)
 				if e.event != nil {
 					e.event.Close()
 				}
 				defer e.clear()
-				e.callback.AddArgs(-1, pb, err)
+				e.callback.AddArgs(-1, data, err)
 				e.callback.Call(h.actimer.Logger)
 			}
 		} else {
+			if mid > 0 {
+				data.TraceErrorf("sync proxy callback timeout, port:%d, mid:%d", port, mid)
+			} else {
+				data.TraceErrorf("async proxy callback timeout, port:%d, mid:%d", port, mid)
+			}
 			h.lock.RUnlock()
 		}
 	}
@@ -101,14 +117,14 @@ func (h *AccessHandler) SyncAccess(proxySession nbtcp.IoSession, data nbtcp.IoBu
 	if timeout == 0 {
 		timeout = DEFAULT_ACCESS_TIMEOUT
 	}
-	return newSyncEntry(proxySession, data, h).syncAccess(timeout)
+	return newSyncEntry(proxySession, data.ConnectID(), h).syncAccess(data, timeout)
 }
 
 /* 向指定连接的服务进行数据访问,异步请求方式(tcp消息代理)
  *超时后如果没有回执消息抛出通讯超时异常
  * proxySession:远程连接
  * data:代理连接处理的消息包
- * callback:收到消息或者请求超时回调函数，默认最后两个参数顺序为(...,nbtcp.IoBuffer, error),构建时传入的参数顺序不变
+ * callback:收到消息或者请求超时回调函数，默认最后两个参数顺序为(...,data nbtcp.IoBuffer, err error),构建时传入的参数顺序不变
  *	ls := len(params)
 *	var err error
 *	var data nbtcp.IoBuffer
@@ -117,13 +133,21 @@ func (h *AccessHandler) SyncAccess(proxySession nbtcp.IoSession, data nbtcp.IoBu
 *	} else if params[ls-2] != nil {
 *		data = params[ls-2].(nbtcp.IoBuffer)
 *	}
+*	//data 永远不会为空，只能通过err是否为空来判断消息是否成功
+*	if err != nil { //请求错误，后续逻辑
+*		//TODO ...
+*	} else { //请求成功，后续逻辑
+*		//TODO ...
+*	}
+*
+*
  * timeout:访问代理请求超时时间(当传入0时表示使用默认时间 DEFAULT_ACCESS_TIMEOUT)
 */
 func (h *AccessHandler) AsyncAccess(proxySession nbtcp.IoSession, data nbtcp.IoBuffer, callback *taskexcutor.TaskService, timeout time.Duration) {
 	if timeout == 0 {
 		timeout = DEFAULT_ACCESS_TIMEOUT
 	}
-	newAsyncEntry(proxySession, data, h, callback).asyncAccess(timeout)
+	newAsyncEntry(proxySession, data.ConnectID(), h, callback).asyncAccess(data, timeout)
 }
 
 func (h *AccessHandler) Port() int32 {
@@ -136,12 +160,12 @@ var muid int64
 //异步消息唯一id生成器
 var amuid int64
 
-//构建连接唯一id
+//构建消息唯一id 正数
 func createMId() int64 {
 	return atomic.AddInt64(&muid, 1)
 }
 
-//构建连接唯一id
+//构建消息唯一id 负数
 func createAmId() int64 {
 	return atomic.AddInt64(&amuid, -1)
 }
@@ -150,37 +174,35 @@ type entry struct {
 	//唯一消息号(正数表示同步请求消息号，负数表示异步请求消息号)
 	mid int64
 	//消息所有者
-	session nbtcp.IoSession
-	//发送的消息
-	data     nbtcp.IoBuffer
+	session  nbtcp.IoSession
+	connId   int64
 	h        *AccessHandler
 	waitChan chan nbtcp.IoBuffer
 	callback *taskexcutor.TaskService
 	event    *timer.TimerEvent
 }
 
-func newSyncEntry(session nbtcp.IoSession, data nbtcp.IoBuffer, h *AccessHandler) *entry {
+func newSyncEntry(session nbtcp.IoSession, connId int64, h *AccessHandler) *entry {
 	return &entry{
 		h:        h,
 		mid:      createMId(),
 		session:  session,
-		data:     data,
+		connId:   connId,
 		waitChan: make(chan nbtcp.IoBuffer, 1),
 	}
 }
-func newAsyncEntry(session nbtcp.IoSession, data nbtcp.IoBuffer, h *AccessHandler, callback *taskexcutor.TaskService) *entry {
+func newAsyncEntry(session nbtcp.IoSession, connId int64, h *AccessHandler, callback *taskexcutor.TaskService) *entry {
 	return &entry{
 		h:        h,
 		mid:      createAmId(),
 		session:  session,
-		data:     data,
+		connId:   connId,
 		callback: callback,
 	}
 }
 
 func (e *entry) clear() {
 	e.h = nil
-	e.data = nil
 	e.session = nil
 	if e.callback != nil {
 		e.callback = nil
@@ -191,16 +213,17 @@ func (e *entry) clear() {
 }
 
 //代理消息阻塞发送，收到消息或者请求超时返回
-func (e *entry) syncAccess(timeout time.Duration) (bb nbtcp.IoBuffer, err error) {
+func (e *entry) syncAccess(data nbtcp.IoBuffer, timeout time.Duration) (bb nbtcp.IoBuffer, err error) {
 	h := e.h
-	out := NewCapBuffer(e.data.Port(), 12+e.data.Len())
+	out := NewCapBuffer(data.Port(), 12+data.Len())
 	out.Cache(true)
 	out.WriteInt64(e.mid)
 	out.WriteInt32(h.Port())
-	out.WriteBuffer(e.data)
+	out.WriteBuffer(data)
 	h.lock.Lock()
 	h.entryMap[e.mid] = *e
 	h.lock.Unlock()
+	data.TracePrintf("sync proxy, port:%d, mid:%d", data.Port(), e.mid)
 	e.session.Write(out)
 	defer func() {
 		h.lock.Lock()
@@ -208,16 +231,25 @@ func (e *entry) syncAccess(timeout time.Duration) (bb nbtcp.IoBuffer, err error)
 		h.lock.Unlock()
 		e.clear()
 	}()
+	data.Reset()
+	bb = data
 	select {
 	case bb = <-e.waitChan:
-		bb.SetConnectID(e.data.ConnectID())
+		bb.SetConnectID(e.connId)
 		bb, err = e.parseData(bb)
+		if bb != nil {
+			bb.RegistTraceInfo(data.TraceInfo())
+			data.TracePrintf("sync proxy callback ok.")
+		} else {
+			data.TracePrintf("sync proxy callback ok,err:%v", err)
+		}
 	case <-time.After(timeout):
 		if e.session.Closed() {
 			err = ACCESS_IO_ERROR
 		} else {
 			err = ACCESS_TIMEOUT_ERROR
 		}
+		data.TraceErrorf("sync proxy callback timeout,err:%v", err)
 	}
 	return
 }
@@ -231,24 +263,31 @@ func (e *entry) parseData(data nbtcp.IoBuffer) (nbtcp.IoBuffer, error) {
 }
 
 //代理消息异步发送，收到消息或者请求超时返回
-func (e *entry) asyncAccess(timeout time.Duration) {
+func (e *entry) asyncAccess(data nbtcp.IoBuffer, timeout time.Duration) {
 	h := e.h
-	out := NewCapBuffer(e.data.Port(), 12+e.data.Len())
+	out := NewCapBuffer(data.Port(), 12+data.Len())
 	out.Cache(true)
 	out.WriteInt64(e.mid)
 	out.WriteInt32(h.Port())
-	out.WriteBuffer(e.data)
+	out.WriteBuffer(data)
 	h.lock.Lock()
 	h.entryMap[e.mid] = *e
 	h.lock.Unlock()
-	e.session.Write(out)
 	//添加超时事件
 	e.event = h.actimer.AddOnceEvent(taskexcutor.NewTaskService(func(params ...interface{}) {
 		e := (params[1]).(*entry)
+		port := (params[2]).(int32)
 		h := e.h
 		if h == nil {
 			return
 		}
+		data := NewBuffer(port, nil)
+		data.SetRcvPort(port)
+		data.SetRcvt(timefix.MillisTime())
+		if EnableTracing {
+			data.RegistTraceInfo(trace.New(fmt.Sprintf("async_callback.port_%d", port), "buffer"))
+		}
+
 		h.lock.Lock()
 		delete(h.entryMap, e.mid)
 		h.lock.Unlock()
@@ -258,8 +297,11 @@ func (e *entry) asyncAccess(timeout time.Duration) {
 		} else {
 			err = ACCESS_TIMEOUT_ERROR
 		}
+		data.TraceErrorf("async proxy callback timeout, mid:%d,err:%v", e.mid, err)
 		defer e.clear()
-		e.callback.AddArgs(-1, nil, err)
+		e.callback.AddArgs(-1, data, err)
 		e.callback.Call(h.actimer.Logger)
-	}, e), "", timeout)
+	}, e, data.Port()), "", timeout)
+	data.TracePrintf("async proxy, port:%d, mid:%d", data.Port(), e.mid)
+	e.session.Write(out)
 }

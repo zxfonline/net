@@ -11,10 +11,13 @@ import (
 	"io"
 	"net"
 
+	"context"
+
 	"github.com/zxfonline/chanutil"
 	"github.com/zxfonline/golog"
 	"github.com/zxfonline/taskexcutor"
-	"golang.org/x/net/context"
+	. "github.com/zxfonline/trace"
+	"golang.org/x/net/trace"
 )
 
 var (
@@ -43,6 +46,7 @@ type ConnectClientFactory struct {
 	clock       sync.RWMutex
 	crtChan     chan string
 	sessionChan chan IoSession
+	tr          trace.Trace
 }
 
 func NewClientFactory(wg *sync.WaitGroup, config *ServerConfig, msgProcessor MsgHandler, ioc func(io.ReadWriter, IoSession) MsgReadWriter, iofilterRegister func(IoSession) IoFilterChain) *ConnectClientFactory {
@@ -80,6 +84,9 @@ func (s *ConnectClientFactory) working(ctx context.Context, msgExcutor taskexcut
 func (s *ConnectClientFactory) Start(msgExcutor taskexcutor.Excutor, timeout time.Duration) {
 	s.wg.Add(1)
 	var ctx context.Context
+	if EnableTracing {
+		s.tr = trace.New("connectfactory", "trace")
+	}
 	ctx, s.quitF = context.WithCancel(context.Background())
 	go s.working(ctx, msgExcutor, timeout)
 }
@@ -91,6 +98,10 @@ func (s *ConnectClientFactory) Close() {
 		s.stopD.SetDone()
 		s.quitF()
 		clientFLogger.Infof("STOPED %+v", s)
+		if s.tr != nil {
+			s.tr.Finish()
+			s.tr = nil
+		}
 		s.wg.Done()
 	})
 }
@@ -122,6 +133,12 @@ func (s *ConnectClientFactory) GetConnect(address string) (c IoSession) {
 		s.clock.Lock()
 		s.connectMap[address] = c
 		s.clock.Unlock()
+		s.tr.LazyPrintf("openInstance [%v] success", address)
+	} else {
+		if s.tr != nil {
+			s.tr.LazyPrintf("openInstance [%v] fails", address)
+			s.tr.SetError()
+		}
 	}
 	return
 }
@@ -136,6 +153,10 @@ func (s *ConnectClientFactory) checkInstance(address string) IoSession {
 			delete(s.connectMap, address)
 			s.clock.Unlock()
 			clientFLogger.Debugf("checkInstance,connect closed,%+v", c)
+			if s.tr != nil {
+				s.tr.LazyPrintf("checkInstance [%v] closed", address)
+				s.tr.SetError()
+			}
 			return nil
 		}
 		return c

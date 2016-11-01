@@ -44,6 +44,7 @@ func (h *CallBackHandler) transwork(iosession nbtcp.IoSession, in nbtcp.IoBuffer
 			default:
 				err = fmt.Errorf("%v", e)
 			}
+			in.TraceErrorf("process err:%v", e)
 		}
 	}()
 	out, err = h.Handler(iosession, in)
@@ -57,6 +58,7 @@ func (h *CallBackHandler) Transmit(iosession nbtcp.IoSession, in nbtcp.IoBuffer)
 		panic(err)
 	}
 	if out != nil { //有回执消息
+		in.TracePrintf("process callback")
 		h.send(iosession, out)
 	}
 }
@@ -82,6 +84,7 @@ func (h *ProxyCallBackHandler) transwork(iosession nbtcp.IoSession, in nbtcp.IoB
 			default:
 				err = fmt.Errorf("%v", e)
 			}
+			in.TraceErrorf("process err:%v", e)
 		}
 	}()
 	out, err = h.Handler(iosession, in)
@@ -103,8 +106,10 @@ func (h *ProxyCallBackHandler) Transmit(iosession nbtcp.IoSession, in nbtcp.IoBu
 			gerr = gerror.New(gerror.SERVER_CMSG_ERROR, err)
 			h.Logger.Warnf("Proxy Access error:%v", err)
 		}
+		in.TracePrintf("process callback")
 		h.sendError(rqport, mid, rtport, iosession, gerr)
 	} else {
+		in.TracePrintf("process callback")
 		h.send(rqport, mid, rtport, iosession, out)
 	}
 }
@@ -146,6 +151,7 @@ func (h *SafeTransmitHandler) Transmit(iosession nbtcp.IoSession, in nbtcp.IoBuf
 	defer func() {
 		if e := recover(); e != nil {
 			h.Logger.Warnf("Transmit error:%v", e)
+			in.TraceErrorf("process err:%v", e)
 		}
 	}()
 	h.Handler(iosession, in)

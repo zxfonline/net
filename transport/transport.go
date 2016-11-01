@@ -4,11 +4,11 @@
 package transport
 
 import (
-	"fmt"
 	"io"
-	"os"
 
-	"github.com/zxfonline/fileutil"
+	//	"github.com/zxfonline/fileutil"
+	//	"fmt"
+	//	"os"
 	"github.com/zxfonline/net/nbtcp"
 )
 
@@ -17,10 +17,15 @@ const DefaultMaxMsg = 128 * 1024
 
 //默认消息解码器注册机
 var DefaultIoc = func(rw io.ReadWriter, session nbtcp.IoSession) nbtcp.MsgReadWriter {
-	md := NewMsgRWDump(NewMsgRWIO(rw, DefaultMaxMsg), nil)
-	if wc, err := fileutil.OpenFile(fmt.Sprintf("./log/dump/session_%d.txt", session.GetCid()), os.O_TRUNC|os.O_CREATE|os.O_WRONLY, fileutil.DefaultFileMode); err == nil {
-		md.SetDump(wc)
-	}
+	//输出到文件
+	//	md := NewMsgRWDump(NewMsgRWIO(rw, DefaultMaxMsg), nil)
+	//	if wc, err := fileutil.OpenFile(fmt.Sprintf("./log/dump/session_%d.txt", session.GetCid()), os.O_TRUNC|os.O_CREATE|os.O_WRONLY, fileutil.DefaultFileMode); err == nil {
+	//		md.SetDump(wc)
+	//	}
+	//	return md
+	md := NewMsgRWDump(NewMsgRWIO("io_service", rw, DefaultMaxMsg), func(nbtcp.IoBuffer) bool {
+		return false
+	})
 	return md
 }
 

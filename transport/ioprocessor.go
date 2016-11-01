@@ -15,6 +15,8 @@ import (
 	"github.com/zxfonline/buffpool"
 	"github.com/zxfonline/gerror"
 	"github.com/zxfonline/net/nbtcp"
+	. "github.com/zxfonline/trace"
+	"golang.org/x/net/trace"
 )
 
 var (
@@ -24,17 +26,18 @@ var (
 )
 
 //消息传送格式:消息包头(length) + 消息包类型(type) + 消息体(data)
-type MsgRWIO struct {
-	RW     io.ReadWriter
-	MsgMax uint
+type msgRWIO struct {
+	RW         io.ReadWriter
+	MsgMax     uint
+	familyhead string
 }
 
-func NewMsgRWIO(rw io.ReadWriter, msgMax uint) *MsgRWIO {
-	return &MsgRWIO{RW: rw, MsgMax: msgMax}
+func NewMsgRWIO(familyhead string, rw io.ReadWriter, msgMax uint) nbtcp.MsgReadWriter {
+	return &msgRWIO{familyhead: familyhead, RW: rw, MsgMax: msgMax}
 }
 
 //nbtcp.MsgReader.ReadMsg()
-func (rw *MsgRWIO) ReadMsg() (data nbtcp.IoBuffer) {
+func (rw *msgRWIO) ReadMsg() (data nbtcp.IoBuffer) {
 	var _l int32
 	err := binary.Read(rw.RW, DefaultEndian, &_l)
 	if err != nil {
@@ -69,11 +72,14 @@ func (rw *MsgRWIO) ReadMsg() (data nbtcp.IoBuffer) {
 	data = NewBuffer(t, m)
 	data.SetRcvPort(t)
 	data.SetRcvt(timefix.MillisTime())
+	if EnableTracing {
+		data.RegistTraceInfo(trace.New(fmt.Sprintf("%s.port_%d", rw.familyhead, t), "buffer"))
+	}
 	return
 }
 
 //nbtcp.MsgWriter.WriteMsg()
-func (rw *MsgRWIO) WriteMsg(data nbtcp.IoBuffer) {
+func (rw *msgRWIO) WriteMsg(data nbtcp.IoBuffer) {
 	data.SetPost(timefix.MillisTime())
 	m := data.Bytes()
 	t := data.Port()
@@ -104,18 +110,18 @@ func (rw *MsgRWIO) WriteMsg(data nbtcp.IoBuffer) {
 }
 
 //消息输出追踪读写器
-type MsgRWDump struct {
+type msgRWDump struct {
 	rw        nbtcp.MsgReadWriter
 	careAbout func(nbtcp.IoBuffer) bool
 	locker    sync.Mutex
 	wc        io.WriteCloser
 }
 
-func NewMsgRWDump(rw nbtcp.MsgReadWriter, careAbout func(nbtcp.IoBuffer) bool) *MsgRWDump {
-	return &MsgRWDump{rw: rw, careAbout: careAbout}
+func NewMsgRWDump(rw nbtcp.MsgReadWriter, careAbout func(nbtcp.IoBuffer) bool) nbtcp.MsgReadWriter {
+	return &msgRWDump{rw: rw, careAbout: careAbout}
 }
 
-func (rw *MsgRWDump) SetDump(wc io.WriteCloser) io.WriteCloser {
+func (rw *msgRWDump) SetDump(wc io.WriteCloser) io.WriteCloser {
 	rw.locker.Lock()
 	defer rw.locker.Unlock()
 	od := rw.wc
@@ -123,14 +129,14 @@ func (rw *MsgRWDump) SetDump(wc io.WriteCloser) io.WriteCloser {
 	return od
 }
 
-func (rw *MsgRWDump) Dump() io.WriteCloser {
+func (rw *msgRWDump) Dump() io.WriteCloser {
 	rw.locker.Lock()
 	defer rw.locker.Unlock()
 	return rw.wc
 }
 
 //nbtcp.StopNotifier.Close()
-func (rw *MsgRWDump) Close() {
+func (rw *msgRWDump) Close() {
 	rw.locker.Lock()
 	defer rw.locker.Unlock()
 	if rw.wc != nil {
@@ -139,7 +145,7 @@ func (rw *MsgRWDump) Close() {
 	}
 }
 
-func (rw *MsgRWDump) needDump(data nbtcp.IoBuffer) bool {
+func (rw *msgRWDump) needDump(data nbtcp.IoBuffer) bool {
 	if rw.careAbout != nil {
 		return rw.careAbout(data)
 	}
@@ -147,7 +153,7 @@ func (rw *MsgRWDump) needDump(data nbtcp.IoBuffer) bool {
 }
 
 //nbtcp.MsgReader.ReadMsg()
-func (rw *MsgRWDump) ReadMsg() (data nbtcp.IoBuffer) {
+func (rw *msgRWDump) ReadMsg() (data nbtcp.IoBuffer) {
 	data = rw.rw.ReadMsg()
 	if !rw.needDump(data) {
 		return
@@ -167,7 +173,7 @@ func (rw *MsgRWDump) ReadMsg() (data nbtcp.IoBuffer) {
 }
 
 //nbtcp.MsgWriter.WriteMsg()
-func (rw *MsgRWDump) WriteMsg(data nbtcp.IoBuffer) {
+func (rw *msgRWDump) WriteMsg(data nbtcp.IoBuffer) {
 	defer rw.rw.WriteMsg(data)
 	if !rw.needDump(data) {
 		return

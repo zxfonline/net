@@ -6,16 +6,16 @@ package nbtcp
 import (
 	"io"
 	"net"
-	"strings"
 	"sync"
 	"time"
+
+	"context"
 
 	"github.com/zxfonline/chanutil"
 	"github.com/zxfonline/golog"
 	"github.com/zxfonline/shutdown"
 	"github.com/zxfonline/taskexcutor"
 	"github.com/zxfonline/timefix"
-	"golang.org/x/net/context"
 )
 
 var (
@@ -64,14 +64,14 @@ type Connect struct {
 //构建tcp连接
 func CreateConnect(wg *sync.WaitGroup, conn net.Conn, ChanReadSize, ChanSendSize, DeadlineSecond, ReadBufMaxSize uint) *Connect {
 	addr := conn.RemoteAddr().String()
-	pos := strings.LastIndex(addr, ":")
-	if pos > 0 {
-		addr = addr[0:pos]
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
 	}
 	c := new(Connect)
 	c.wg = wg
 	c.conn = conn
-	c.ip = net.ParseIP(addr).String()
+	c.ip = net.ParseIP(host).String()
 	c.ChanReadSize = ChanReadSize
 	c.ChanSendSize = ChanSendSize
 	c.DeadlineSecond = DeadlineSecond
@@ -111,8 +111,22 @@ func (c *Connect) Processing(params ...interface{}) {
 		default:
 			select {
 			case data := <-c.readChan:
-				data.SetPrct(timefix.MillisTime())
-				c.transH.Transmit(c, c.filter.MessageReceived(c, data))
+				func() {
+					defer func() {
+						if e := recover(); e != nil {
+							data.TraceErrorf("process err:%v", e)
+							data.TracePrintf("end process")
+							data.TraceFinish()
+							panic(e)
+						} else {
+							data.TracePrintf("end process")
+							data.TraceFinish()
+						}
+					}()
+					data.TracePrintf("start process")
+					data.SetPrct(timefix.MillisTime())
+					c.transH.Transmit(c, c.filter.MessageReceived(c, data))
+				}()
 			default:
 				q = true
 			}
@@ -203,6 +217,7 @@ func (c *Connect) receiving(ctx context.Context, msgExcutor taskexcutor.Excutor)
 			q = true
 		default:
 			data.SetConnectID(c.cid)
+			data.TracePrintf("wait process msg from %v", c.RemoteAddr())
 			c.readChan <- data
 			c.runlock.Lock()
 			select {

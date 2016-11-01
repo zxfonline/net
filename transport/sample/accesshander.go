@@ -138,10 +138,10 @@ func (h *AccessHandler) Transmit(data nbtcp.IoBuffer) {
 			h.lock.Lock()
 			delete(h.entryMap, mid)
 			h.lock.Unlock()
-			if e.data == nil {
+			if e.callback == nil {
 				return
 			}
-			pb.SetConnectID(e.data.ConnectID())
+			pb.SetConnectID(e.connId)
 			var err error
 			pb, err = e.parseData(pb)
 			if e.event != nil {
@@ -162,12 +162,12 @@ func (h *AccessHandler) SyncAccess(data nbtcp.IoBuffer, timeout time.Duration) (
 	defer func(start time.Time) {
 		fmt.Printf("over access cost=%s, start=%s,end=%s block return value=%+v,err=%v\n", time.Now().Sub(start), start, time.Now(), rb, err)
 	}(start)
-	rb, err = newSyncEntry(data, h).syncAccess(timeout)
+	rb, err = newSyncEntry(data.ConnectID(), h).syncAccess(data, timeout)
 	return
 }
 
 func (h *AccessHandler) AsyncAccess(data nbtcp.IoBuffer, callback *taskexcutor.TaskService, timeout time.Duration) {
-	newAsyncEntry(data, h, callback).asyncAccess(timeout)
+	newAsyncEntry(data.ConnectID(), h, callback).asyncAccess(data, timeout)
 }
 
 func (h *AccessHandler) Port() int32 {
@@ -194,32 +194,30 @@ type entry struct {
 	h        *AccessHandler
 	waitChan chan nbtcp.IoBuffer
 	//唯一消息号(正数表示同步请求消息号，负数表示异步请求消息号)
-	mid int64
-	//发送的消息
-	data     nbtcp.IoBuffer
+	mid      int64
+	connId   int64
 	callback *taskexcutor.TaskService
 	event    *timer.TimerEvent
 }
 
-func newSyncEntry(data nbtcp.IoBuffer, h *AccessHandler) *entry {
+func newSyncEntry(connId int64, h *AccessHandler) *entry {
 	return &entry{
 		h:        h,
 		mid:      createMId(),
-		data:     data,
+		connId:   connId,
 		waitChan: make(chan nbtcp.IoBuffer, 1),
 	}
 }
-func newAsyncEntry(data nbtcp.IoBuffer, h *AccessHandler, callback *taskexcutor.TaskService) *entry {
+func newAsyncEntry(connId int64, h *AccessHandler, callback *taskexcutor.TaskService) *entry {
 	return &entry{
 		h:        h,
 		mid:      createAmId(),
-		data:     data,
+		connId:   connId,
 		callback: callback,
 	}
 }
 func (e *entry) clear() {
 	e.h = nil
-	e.data = nil
 	if e.callback != nil {
 		e.callback = nil
 	}
@@ -229,13 +227,13 @@ func (e *entry) clear() {
 }
 
 //网络代理发送数据
-func (e *entry) syncAccess(timeout time.Duration) (bb nbtcp.IoBuffer, err error) {
+func (e *entry) syncAccess(data nbtcp.IoBuffer, timeout time.Duration) (bb nbtcp.IoBuffer, err error) {
 	h := e.h
-	out := transport.NewCapBuffer(e.data.Port(), 12+e.data.Len())
+	out := transport.NewCapBuffer(data.Port(), 12+data.Len())
 	out.Cache(true)
 	out.WriteInt64(e.mid)
 	out.WriteInt32(h.Port())
-	out.WriteBuffer(e.data)
+	out.WriteBuffer(data)
 	h.lock.Lock()
 	h.entryMap[e.mid] = *e
 	h.lock.Unlock()
@@ -268,7 +266,7 @@ func (e *entry) syncAccess(timeout time.Duration) (bb nbtcp.IoBuffer, err error)
 	}()
 	select {
 	case bb = <-e.waitChan:
-		bb.SetConnectID(e.data.ConnectID())
+		bb.SetConnectID(e.connId)
 		bb, err = e.parseData(bb)
 		//		fmt.Printf("收到回包，data=%+v,%v,entry=%+v\n", bb, err, e)
 	case <-time.After(timeout):
@@ -287,17 +285,32 @@ func (e *entry) parseData(data nbtcp.IoBuffer) (nbtcp.IoBuffer, error) {
 }
 
 //代理消息异步发送，收到消息或者请求超时返回
-func (e *entry) asyncAccess(timeout time.Duration) {
+func (e *entry) asyncAccess(data nbtcp.IoBuffer, timeout time.Duration) {
 	start := time.Now()
 	h := e.h
-	out := transport.NewCapBuffer(e.data.Port(), 12+e.data.Len())
+	out := transport.NewCapBuffer(data.Port(), 12+data.Len())
 	out.Cache(true)
 	out.WriteInt64(e.mid)
 	out.WriteInt32(h.Port())
-	out.WriteBuffer(e.data)
+	out.WriteBuffer(data)
 	h.lock.Lock()
 	h.entryMap[e.mid] = *e
 	h.lock.Unlock()
+	//添加超时事件
+	e.callback.AddArgs(-1, start)
+	e.event = h.actimer.AddOnceEvent(taskexcutor.NewTaskService(func(params ...interface{}) {
+		e := (params[1]).(*entry)
+		h := e.h
+		if h == nil {
+			return
+		}
+		h.lock.Lock()
+		delete(h.entryMap, e.mid)
+		h.lock.Unlock()
+		defer e.clear()
+		e.callback.AddArgs(-1, nil, ACCESS_TIMEOUT)
+		e.callback.Call(h.actimer.Logger)
+	}, e), "", timeout)
 
 	go func(in nbtcp.IoBuffer) {
 		//模仿网络通信,接收端收到消息
@@ -320,19 +333,4 @@ func (e *entry) asyncAccess(timeout time.Duration) {
 		//		rbb.WriteStr(ae.Content)
 		Session <- rbb
 	}(out)
-	//添加超时事件
-	e.callback.AddArgs(-1, start)
-	e.event = h.actimer.AddOnceEvent(taskexcutor.NewTaskService(func(params ...interface{}) {
-		e := (params[1]).(*entry)
-		h := e.h
-		if h == nil {
-			return
-		}
-		h.lock.Lock()
-		delete(h.entryMap, e.mid)
-		h.lock.Unlock()
-		defer e.clear()
-		e.callback.AddArgs(-1, nil, ACCESS_TIMEOUT)
-		e.callback.Call(h.actimer.Logger)
-	}, e), "", timeout)
 }
