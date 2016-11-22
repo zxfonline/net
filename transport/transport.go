@@ -47,14 +47,15 @@ func (r *DefaultIoFilterChain) SessionOpened(session nbtcp.IoSession) {
 
 }
 
+//初始化加密
+func (r *DefaultIoFilterChain) InitEncrypt(token int64, callback func(nbtcp.IoBuffer)) {}
+
 //step3: nbtcp.IoFilterChain.MessageReceived() 进行消息包解码、解压、解包等详细处理
-func (r *DefaultIoFilterChain) MessageReceived(session nbtcp.IoSession, data nbtcp.IoBuffer) nbtcp.IoBuffer {
-	return data
+func (r *DefaultIoFilterChain) MessageReceived(session nbtcp.IoSession, data nbtcp.IoBuffer) {
 }
 
 //step4: nbtcp.IoFilterChain.MessageSend() 进行消息包编码、压缩、封装等详细处理
-func (r *DefaultIoFilterChain) MessageSend(session nbtcp.IoSession, data nbtcp.IoBuffer) nbtcp.IoBuffer {
-	return data
+func (r *DefaultIoFilterChain) MessageSend(session nbtcp.IoSession, data nbtcp.IoBuffer) {
 }
 
 //step5: nbtcp.IoFilterChain.SessionClosed() 连接关闭后续处理

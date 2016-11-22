@@ -36,7 +36,7 @@ func NewMsgRWIO(familyhead string, rw io.ReadWriter, msgMax uint) nbtcp.MsgReadW
 	return &msgRWIO{familyhead: familyhead, RW: rw, MsgMax: msgMax}
 }
 
-//nbtcp.MsgReader.ReadMsg()
+//nbtcp.MsgReader.ReadMsg() len[4]=port[4]+body[n]
 func (rw *msgRWIO) ReadMsg() (data nbtcp.IoBuffer) {
 	var _l int32
 	err := binary.Read(rw.RW, DefaultEndian, &_l)
@@ -78,7 +78,7 @@ func (rw *msgRWIO) ReadMsg() (data nbtcp.IoBuffer) {
 	return
 }
 
-//nbtcp.MsgWriter.WriteMsg()
+//nbtcp.MsgWriter.WriteMsg() len[4]=port[4]+body[n]
 func (rw *msgRWIO) WriteMsg(data nbtcp.IoBuffer) {
 	data.SetPost(timefix.MillisTime())
 	m := data.Bytes()

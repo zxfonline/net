@@ -80,8 +80,9 @@ func (nb *nbuffer) SetConnectID(cid int64) {
 	nb.connectId = cid
 }
 
-func (nb *nbuffer) Reset() {
+func (nb *nbuffer) Reset() nbtcp.IoBuffer {
 	nb.buf.Reset()
+	return nb
 }
 func (nb *nbuffer) Len() int {
 	return nb.buf.Len()
@@ -92,8 +93,9 @@ func (nb *nbuffer) Bytes() []byte {
 func (nb *nbuffer) Cached() bool {
 	return nb.cache
 }
-func (nb *nbuffer) Cache(cache bool) {
+func (nb *nbuffer) Cache(cache bool) nbtcp.IoBuffer {
 	nb.cache = cache
+	return nb
 }
 
 func (nb *nbuffer) Port() int32 {

@@ -51,14 +51,16 @@ type Connect struct {
 	wg       *sync.WaitGroup
 	stopD    chanutil.DoneChan
 	quitF    context.CancelFunc
+
 	//收到消息是否阻塞
 	runstate chan bool
 	runlock  sync.Mutex
 	//消息收取缓冲管道
 	readChan chan IoBuffer
+	service  *taskexcutor.TaskService
+
 	//消息发送器
-	sender  *Sender
-	service *taskexcutor.TaskService
+	sender *Sender
 }
 
 //构建tcp连接
@@ -89,7 +91,8 @@ func (c *Connect) transfer(out interface{}) {
 	default:
 		switch v := out.(type) {
 		case IoBuffer:
-			c.rw.WriteMsg(c.filter.MessageSend(c, v))
+			c.filter.MessageSend(c, v)
+			c.rw.WriteMsg(v)
 		default: //非IoBuffer 表示关闭连接
 			c.Close()
 		}
@@ -97,7 +100,7 @@ func (c *Connect) transfer(out interface{}) {
 }
 
 //socket消息处理统一方法，由线程池调用,其他地方请勿调用
-func (c *Connect) Processing(params ...interface{}) {
+func (c *Connect) processingQueue(params ...interface{}) {
 	defer c.recoverClose()
 	defer func() {
 		c.runlock.Lock()
@@ -125,12 +128,38 @@ func (c *Connect) Processing(params ...interface{}) {
 					}()
 					data.TracePrintf("start process")
 					data.SetPrct(timefix.MillisTime())
-					c.transH.Transmit(c, c.filter.MessageReceived(c, data))
+					c.filter.MessageReceived(c, data)
+					c.transH.Transmit(c, data)
 				}()
 			default:
 				q = true
 			}
 		}
+	}
+}
+
+//socket消息处理统一方法，由线程池调用,其他地方请勿调用
+func (c *Connect) processingMutil(params ...interface{}) {
+	select {
+	case <-c.stopD: //连接关闭
+	default:
+		data := params[0].(IoBuffer)
+		defer c.recoverClose()
+		defer func() {
+			if e := recover(); e != nil {
+				data.TraceErrorf("process err:%v", e)
+				data.TracePrintf("end process")
+				data.TraceFinish()
+				panic(e)
+			} else {
+				data.TracePrintf("end process")
+				data.TraceFinish()
+			}
+		}()
+		data.TracePrintf("start process")
+		data.SetPrct(timefix.MillisTime())
+		c.filter.MessageReceived(c, data)
+		c.transH.Transmit(c, data)
 	}
 }
 
@@ -147,7 +176,7 @@ func (c *Connect) openCheck() (ok bool) {
 }
 
 //tcp连接初始化
-func (c *Connect) Open(parent context.Context, msgExcutor taskexcutor.Excutor, cid int64, msgProcessor MsgHandler, ioc func(io.ReadWriter, IoSession) MsgReadWriter, iofilterRegister func(IoSession) IoFilterChain) (ok bool) {
+func (c *Connect) Open(parent context.Context, msgExcutor taskexcutor.Excutor, cid int64, msgProcessor MsgHandler, ioc func(io.ReadWriter, IoSession) MsgReadWriter, iofilterRegister func(IoSession) IoFilterChain, mutilMsg bool) (ok bool) {
 	c.initOnce.Do(func() {
 		connLogger.Debugf("INITING %+v", c)
 		c.wg.Add(1)
@@ -169,11 +198,16 @@ func (c *Connect) Open(parent context.Context, msgExcutor taskexcutor.Excutor, c
 		c.sender = NewSender(c)
 		go c.sender.Start()
 		c.transH = msgProcessor
-		c.readChan = make(chan IoBuffer, c.ChanReadSize)
-		c.service = taskexcutor.NewTaskService(c.Processing)
-		c.runstate = make(chan bool, 1)
+
+		if mutilMsg {
+			go c.receivingMutil(ctx, msgExcutor)
+		} else {
+			c.readChan = make(chan IoBuffer, c.ChanReadSize)
+			c.runstate = make(chan bool, 1)
+			c.service = taskexcutor.NewTaskService(c.processingQueue)
+			go c.receivingQueue(ctx, msgExcutor)
+		}
 		go c.monitor(ctx)
-		go c.receiving(ctx, msgExcutor)
 
 		defer c.recoverClose()
 		c.filter.SessionOpened(c)
@@ -181,6 +215,15 @@ func (c *Connect) Open(parent context.Context, msgExcutor taskexcutor.Excutor, c
 		ok = true
 	})
 	return
+}
+
+//初始化加密
+func (c *Connect) InitEncrypt(token int64) {
+	c.filter.InitEncrypt(token, func(encryptdata IoBuffer) {
+		if encryptdata != nil {
+			c.rw.WriteMsg(encryptdata)
+		}
+	})
 }
 
 func (c *Connect) monitor(ctx context.Context) {
@@ -200,7 +243,7 @@ func (c *Connect) monitor(ctx context.Context) {
 	}
 }
 
-func (c *Connect) receiving(ctx context.Context, msgExcutor taskexcutor.Excutor) {
+func (c *Connect) receivingQueue(ctx context.Context, msgExcutor taskexcutor.Excutor) {
 	defer c.Close()
 	defer func() {
 		if e := recover(); e != nil {
@@ -229,6 +272,32 @@ func (c *Connect) receiving(ctx context.Context, msgExcutor taskexcutor.Excutor)
 				}
 			default:
 				c.runlock.Unlock()
+			}
+		}
+	}
+}
+
+func (c *Connect) receivingMutil(ctx context.Context, msgExcutor taskexcutor.Excutor) {
+	defer c.Close()
+	defer func() {
+		if e := recover(); e != nil {
+			connLogger.Debugf("recover error:%v,conn=%+v", e, c)
+		}
+	}()
+	for q := false; !q; {
+		if c.DeadlineSecond > 0 {
+			c.conn.SetReadDeadline(time.Now().Add(time.Duration(c.DeadlineSecond) * time.Second))
+		}
+		data := c.rw.ReadMsg()
+		select {
+		case <-ctx.Done(): //连接关闭
+			q = true
+		default:
+			data.SetConnectID(c.cid)
+			data.TracePrintf("wait process msg from %v", c.RemoteAddr())
+			err := msgExcutor.Excute(taskexcutor.NewTaskService(c.processingMutil, data))
+			if err != nil {
+				panic(err)
 			}
 		}
 	}

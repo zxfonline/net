@@ -69,7 +69,7 @@ func NewServer(wg *sync.WaitGroup, config *ServerConfig, msgProcessor MsgHandler
 func (s *Server) createConnectId() int64 {
 	return atomic.AddInt64(&s.cuid, 1)
 }
-func (s *Server) working(ctx context.Context, msgExcutor taskexcutor.Excutor) {
+func (s *Server) working(ctx context.Context, msgExcutor taskexcutor.Excutor, mutilMsg bool) {
 	defer func(ctx context.Context) {
 		if !s.Closed() {
 			if e := recover(); e != nil {
@@ -81,7 +81,7 @@ func (s *Server) working(ctx context.Context, msgExcutor taskexcutor.Excutor) {
 			if err != nil { //重连失败
 				s.Close()
 			} else { //重连成功，继续工作
-				go s.working(ctx, msgExcutor)
+				go s.working(ctx, msgExcutor, mutilMsg)
 			}
 		} else {
 			if e := recover(); e != nil {
@@ -89,9 +89,9 @@ func (s *Server) working(ctx context.Context, msgExcutor taskexcutor.Excutor) {
 			}
 		}
 	}(ctx)
-	s.accept(ctx, msgExcutor)
+	s.accept(ctx, msgExcutor, mutilMsg)
 }
-func (s *Server) accept(ctx context.Context, msgExcutor taskexcutor.Excutor) {
+func (s *Server) accept(ctx context.Context, msgExcutor taskexcutor.Excutor, mutilMsg bool) {
 	var tempDelay time.Duration
 	for q := false; !q; {
 		c, err := s.l.Accept()
@@ -113,7 +113,7 @@ func (s *Server) accept(ctx context.Context, msgExcutor taskexcutor.Excutor) {
 			panic(err)
 		}
 		tempDelay = 0
-		s.newClient(ctx, c, msgExcutor)
+		s.newClient(ctx, c, msgExcutor, mutilMsg)
 	}
 }
 
@@ -147,7 +147,7 @@ func (s *Server) startListener(trytime int) error {
 }
 
 //启动服务器
-func (s *Server) Start(msgExcutor taskexcutor.Excutor) {
+func (s *Server) Start(msgExcutor taskexcutor.Excutor, mutilMsg bool) {
 	err := s.startListener(1)
 	if err != nil {
 		panic(err)
@@ -155,12 +155,12 @@ func (s *Server) Start(msgExcutor taskexcutor.Excutor) {
 	s.wg.Add(1)
 	var ctx context.Context
 	ctx, s.quitF = context.WithCancel(context.Background())
-	go s.working(ctx, msgExcutor)
+	go s.working(ctx, msgExcutor, mutilMsg)
 }
 
-func (s *Server) newClient(ctx context.Context, conn net.Conn, msgExcutor taskexcutor.Excutor) {
+func (s *Server) newClient(ctx context.Context, conn net.Conn, msgExcutor taskexcutor.Excutor, mutilMsg bool) {
 	c := CreateConnect(s.wg, conn, s.config.ChanReadSize, s.config.ChanSendSize, s.config.DeadlineSecond, s.config.ReadBufMaxSize)
-	c.Open(ctx, msgExcutor, s.createConnectId(), s.msgProcessor, s.ioc, s.iofilterRegister)
+	c.Open(ctx, msgExcutor, s.createConnectId(), s.msgProcessor, s.ioc, s.iofilterRegister, mutilMsg)
 }
 
 //关闭服务器 shutdown.StopNotifier.Close()

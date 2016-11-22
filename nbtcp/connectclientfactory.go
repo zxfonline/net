@@ -68,27 +68,27 @@ func (s *ConnectClientFactory) createConnectId() int64 {
 	return atomic.AddInt64(&s.cuid, 1)
 }
 
-func (s *ConnectClientFactory) working(ctx context.Context, msgExcutor taskexcutor.Excutor, timeout time.Duration) {
+func (s *ConnectClientFactory) working(ctx context.Context, msgExcutor taskexcutor.Excutor, timeout time.Duration, mutilMsg bool) {
 	for q := false; !q; {
 		select {
 		case <-s.stopD:
 			q = true
 		case address := <-s.crtChan:
-			c := OpenConnect(ctx, address, timeout, s.wg, s.createConnectId(), s.msgProcessor, s.ioc, s.iofilterRegister, msgExcutor, s.config.ChanReadSize, s.config.ChanSendSize, s.config.DeadlineSecond, s.config.ReadBufMaxSize)
+			c := OpenConnect(ctx, address, timeout, s.wg, s.createConnectId(), s.msgProcessor, s.ioc, s.iofilterRegister, msgExcutor, s.config.ChanReadSize, s.config.ChanSendSize, s.config.DeadlineSecond, s.config.ReadBufMaxSize, mutilMsg)
 			s.sessionChan <- c
 		}
 	}
 }
 
 //启动 timeout:连接建立请求超时时间
-func (s *ConnectClientFactory) Start(msgExcutor taskexcutor.Excutor, timeout time.Duration) {
+func (s *ConnectClientFactory) Start(msgExcutor taskexcutor.Excutor, timeout time.Duration, mutilMsg bool) {
 	s.wg.Add(1)
 	var ctx context.Context
 	if EnableTracing {
 		s.tr = trace.New("connectfactory", "trace")
 	}
 	ctx, s.quitF = context.WithCancel(context.Background())
-	go s.working(ctx, msgExcutor, timeout)
+	go s.working(ctx, msgExcutor, timeout, mutilMsg)
 }
 
 //关闭 shutdown.StopNotifier.Close()
@@ -167,7 +167,7 @@ func (s *ConnectClientFactory) checkInstance(address string) IoSession {
 }
 
 //创建新连接
-func OpenConnect(ctx context.Context, address string, timeout time.Duration, wg *sync.WaitGroup, connId int64, msgProcessor MsgHandler, ioc func(io.ReadWriter, IoSession) MsgReadWriter, iofilterRegister func(IoSession) IoFilterChain, msgExcutor taskexcutor.Excutor, ChanReadSize, ChanSendSize, DeadlineSecond, ReadBufMaxSize uint) IoSession {
+func OpenConnect(ctx context.Context, address string, timeout time.Duration, wg *sync.WaitGroup, connId int64, msgProcessor MsgHandler, ioc func(io.ReadWriter, IoSession) MsgReadWriter, iofilterRegister func(IoSession) IoFilterChain, msgExcutor taskexcutor.Excutor, ChanReadSize, ChanSendSize, DeadlineSecond, ReadBufMaxSize uint, mutilMsg bool) IoSession {
 	if address == "" {
 		clientFLogger.Warnf("OpenInstance error,connect fail,nil address")
 		return nil
@@ -178,7 +178,7 @@ func OpenConnect(ctx context.Context, address string, timeout time.Duration, wg 
 		return nil
 	}
 	c := CreateConnect(wg, conn, ChanReadSize, ChanSendSize, DeadlineSecond, ReadBufMaxSize)
-	ok := c.Open(ctx, msgExcutor, connId, msgProcessor, ioc, iofilterRegister)
+	ok := c.Open(ctx, msgExcutor, connId, msgProcessor, ioc, iofilterRegister, mutilMsg)
 	if ok {
 		clientFLogger.Infof("OpenInstance ok,connect opened,connect=%+v", c)
 		return c

@@ -23,7 +23,7 @@ type MsgReader interface {
 
 //消息写入器
 type MsgWriter interface {
-	//写入后的消息是否加入字节缓存，如果是主播方式发送数据不能为true否则组播没完成可能被其他地方使用(调用者自行处理抛出的错误)
+	//写入后的消息是否加入字节缓存，如果是组播方式发送数据不能为true否则组播没完成可能被其他地方使用(调用者自行处理抛出的错误)
 	WriteMsg(IoBuffer)
 }
 
@@ -39,12 +39,14 @@ type IoFilterChain interface {
 	SessionOpening(IoSession) bool
 	//连接开启成功
 	SessionOpened(IoSession)
+	//初始化加密
+	InitEncrypt(int64, func(IoBuffer))
+	//进行消息包解码、解压、解包等详细处理(调用者自行捕获错误)
+	MessageReceived(IoSession, IoBuffer)
+	//进行消息包编码、压缩、封装等详细处理(调用者自行捕获错误)
+	MessageSend(IoSession, IoBuffer)
 	//会话关闭
 	SessionClosed(IoSession)
-	//进行消息包解码、解压、解包等详细处理(调用者自行捕获错误)
-	MessageReceived(IoSession, IoBuffer) IoBuffer
-	//进行消息包编码、压缩、封装等详细处理(调用者自行捕获错误)
-	MessageSend(IoSession, IoBuffer) IoBuffer
 }
 
 //socket连接封装器
@@ -65,6 +67,8 @@ type IoSession interface {
 	ReadBufMaxSize() uint
 	//发送消息 如果参数非nbtcp.IoBuffer类型或写入时出错，内部会抛错，调用者自行处理异常
 	Write(interface{})
+	//初始化加密
+	InitEncrypt(token int64)
 }
 
 //io消息封装器
@@ -98,13 +102,14 @@ type IoBuffer interface {
 	//是否放入数组缓存
 	Cached() bool
 	//发送完缓存数据数据
-	Cache(bool)
+	Cache(bool) IoBuffer
 	//返回未读完数据
 	Bytes() []byte
 	//可读数据长度
 	Len() int
 	//数据重置
-	Reset()
+	Reset() IoBuffer
+
 	//写入字节数组，不包含了长度头
 	WriteData([]byte)
 	//写入buffer中未读的字节，不包含了长度头
@@ -115,6 +120,7 @@ type IoBuffer interface {
 	WriteHeadBuffer(IoBuffer)
 	//读取字节数据，通过读取字节头判断字节长度
 	ReadHeadData() []byte
+
 	ReadInt8() int8
 	ReadUint8() uint8
 	ReadInt16() int16
@@ -129,6 +135,7 @@ type IoBuffer interface {
 	UnreadByte()
 	ReadFloat32() float32
 	ReadFloat64() float64
+
 	WriteInt8(int8)
 	WriteUint8(uint8)
 	WriteInt16(int16)
@@ -142,7 +149,9 @@ type IoBuffer interface {
 	WriteByte(byte)
 	WriteFloat32(float32)
 	WriteFloat64(float64)
+
 	String() string
+
 	RegistTraceInfo(trace.Trace)
 	TraceInfo() trace.Trace
 	TracePrintf(format string, a ...interface{})

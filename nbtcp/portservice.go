@@ -9,25 +9,33 @@ import (
 
 	"github.com/zxfonline/gerror"
 	"github.com/zxfonline/golog"
+	"github.com/zxfonline/iptable"
 )
 
 //消息处理派发器
 type PortService struct {
 	cache  map[int32]MsgHandler
+	forbid map[int32]bool
 	Logger *golog.Logger
 }
 
 //处理消息通过消息类型进行派发
 func (p *PortService) Transmit(session IoSession, data IoBuffer) {
 	if h, ok := p.cache[data.Port()]; ok {
+		if _, exist := p.forbid[data.Port()]; exist {
+			if !iptable.IsTrustedIP(session.RemoteIP()) {
+				panic(gerror.NewError(gerror.SERVER_CDATA_ERROR, fmt.Sprintf("transmit forbid handler,ip:%s,port:%d", session.RemoteIP(), data.Port())))
+				return
+			}
+		}
 		h.Transmit(session, data)
 		return
 	}
-	panic(gerror.NewError(gerror.SERVER_CDATA_ERROR, fmt.Sprintf("transmit no handler,port=%d", data.Port())))
+	panic(gerror.NewError(gerror.SERVER_CDATA_ERROR, fmt.Sprintf("transmit no handler,ip:%s,port:%d", session.RemoteIP(), data.Port())))
 }
 
 //注册消息处理器 参数错误或者重复注册将触发panic
-func (p *PortService) RegistHandler(port int32, handler MsgHandler) {
+func (p *PortService) RegistHandler(port int32, handler MsgHandler, forbid bool) {
 	if handler == nil {
 		panic(errors.New("illegal handler error"))
 	}
@@ -35,6 +43,7 @@ func (p *PortService) RegistHandler(port int32, handler MsgHandler) {
 		panic(fmt.Errorf("repeat regist handler error,port=%d handler=%+v", port, handler))
 	}
 	p.cache[port] = handler
+	p.forbid[port] = forbid
 	p.Logger.Infof("Regist port=%d handler=%+v", port, handler)
 }
 
@@ -42,6 +51,7 @@ func (p *PortService) RegistHandler(port int32, handler MsgHandler) {
 func NewPortService(name string) *PortService {
 	return &PortService{
 		cache:  make(map[int32]MsgHandler),
+		forbid: make(map[int32]bool),
 		Logger: golog.New(name),
 	}
 }
