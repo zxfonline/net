@@ -56,6 +56,7 @@ func (r *DefaultIoFilterChain) MessageReceived(session nbtcp.IoSession, data nbt
 
 //step4: nbtcp.IoFilterChain.MessageSend() 进行消息包编码、压缩、封装等详细处理
 func (r *DefaultIoFilterChain) MessageSend(session nbtcp.IoSession, data nbtcp.IoBuffer) {
+	data.Cache(true)
 }
 
 //step5: nbtcp.IoFilterChain.SessionClosed() 连接关闭后续处理

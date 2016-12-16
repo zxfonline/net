@@ -61,6 +61,8 @@ type Connect struct {
 
 	//消息发送器
 	sender *Sender
+	//连接绑定的的数据源
+	source interface{}
 }
 
 //构建tcp连接
@@ -80,6 +82,16 @@ func CreateConnect(wg *sync.WaitGroup, conn net.Conn, ChanReadSize, ChanSendSize
 	c.bufMaxSize = ReadBufMaxSize
 	connLogger.Debugf("CREATE %+v", c)
 	return c
+}
+
+//设置连接数据源
+func (c *Connect) SetSource(source interface{}) {
+	c.source = source
+}
+
+//获取连接数据源
+func (c *Connect) GetSource() interface{} {
+	return c.source
 }
 
 //socket消息发送统一方法，由消息发送器调用

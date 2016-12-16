@@ -6,7 +6,9 @@ package transport
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/gob"
 	"fmt"
+	"io"
 	"math"
 	"time"
 
@@ -87,6 +89,11 @@ func (nb *nbuffer) Reset() nbtcp.IoBuffer {
 func (nb *nbuffer) Len() int {
 	return nb.buf.Len()
 }
+
+func (nb *nbuffer) Cap() int {
+	return nb.buf.Cap()
+}
+
 func (nb *nbuffer) Bytes() []byte {
 	return nb.buf.Bytes()
 }
@@ -127,19 +134,19 @@ func (nb *nbuffer) WriteBuffer(io nbtcp.IoBuffer) {
 }
 
 //写入字节数组，包含了长度头
-func (nb *nbuffer) WriteHeadData(bb []byte) {
+func (nb *nbuffer) WriteDataWithHead(bb []byte) {
 	nb.writeLength(len(bb))
 	nb.WriteData(bb)
 }
 
 //写入buffer中未读的字节，包含了长度头
-func (nb *nbuffer) WriteHeadBuffer(io nbtcp.IoBuffer) {
-	nb.WriteHeadData(io.Bytes())
+func (nb *nbuffer) WriteBufferWithHead(io nbtcp.IoBuffer) {
+	nb.WriteDataWithHead(io.Bytes())
 }
 
-func (nb *nbuffer) ReadHeadData() []byte {
+func (nb *nbuffer) ReadDataWithHead() []byte {
 	n := nb.readLength()
-	bb := make([]byte, n, n)
+	bb := buffpool.BufGet(n)
 	if n == 0 {
 		return bb
 	}
@@ -211,19 +218,20 @@ func (nb *nbuffer) ReadUint64() (n uint64) {
 	}
 	return
 }
-func (nb *nbuffer) ReadStr() string {
+func (nb *nbuffer) ReadString() string {
 	n := nb.readLength()
 	if n == 0 {
 		return ""
 	}
-	bb := make([]byte, n, n)
+	bb := buffpool.BufGet(n)
+	defer buffpool.BufPut(bb)
 	err := binary.Read(nb.buf, DefaultEndian, bb)
 	if err != nil {
 		panic(err)
 	}
 	return string(bb)
 }
-func (nb *nbuffer) WriteStr(str string) {
+func (nb *nbuffer) WriteString(str string) {
 	if str == "" {
 		nb.writeLength(0)
 		return
@@ -249,12 +257,6 @@ func (nb *nbuffer) ReadByte() byte {
 		panic(err)
 	}
 	return b
-}
-func (nb *nbuffer) UnreadByte() {
-	err := nb.buf.UnreadByte()
-	if err != nil {
-		panic(err)
-	}
 }
 func (nb *nbuffer) ReadFloat32() float32 {
 	x := nb.ReadUint32()
@@ -332,7 +334,11 @@ func (nb *nbuffer) readLength() int {
 	if n >= 0x80 {
 		return n - 0x80
 	}
-	nb.UnreadByte()
+	err := nb.buf.UnreadByte()
+	if err != nil {
+		panic(err)
+	}
+
 	if n >= 0x40 {
 		return int(nb.ReadUint16() - 0x4000)
 	}
@@ -400,6 +406,55 @@ func (nb *nbuffer) Uuid() int64 {
 }
 func (nb *nbuffer) SetUuid(uuid int64) {
 	nb.uuid = uuid
+}
+
+//io.ReaderFrom interface func ReadFrom reads data from r until EOF and appends it to the buffer, growing
+// the buffer as needed. The return value n is the number of bytes read. Any
+// error except io.EOF encountered during the read is also returned. If the
+// buffer becomes too large, ReadFrom will panic with ErrTooLarge.
+func (nb *nbuffer) ReadFrom(r io.Reader) (int64, error) {
+	return nb.buf.ReadFrom(r)
+}
+
+// io.WriterTo interface func WriteTo writes data to w until the buffer is drained or an error occurs.
+// The return value n is the number of bytes written; it always fits into an
+// int, but it is int64 to match the io.WriterTo interface. Any error
+// encountered during the write is also returned.
+func (nb *nbuffer) WriteTo(w io.Writer) (int64, error) {
+	return nb.buf.WriteTo(w)
+}
+
+//io.Reader interface func Read reads the next len(p) bytes from the buffer or until the buffer
+// is drained. The return value n is the number of bytes read. If the
+// buffer has no data to return, err is io.EOF (unless len(p) is zero);
+// otherwise it is nil.
+func (nb *nbuffer) Read(p []byte) (int, error) {
+	return nb.buf.Read(p)
+}
+
+// io.Writer interface func Write appends the contents of p to the buffer, growing the buffer as
+// needed. The return value n is the length of p; err is always nil. If the
+// buffer becomes too large, Write will panic with ErrTooLarge.
+func (nb *nbuffer) Write(p []byte) (int, error) {
+	return nb.buf.Write(p)
+}
+
+//将interface通过"encoding/gob"编码写入到buffer中 用于golang进程间通信
+func (nb *nbuffer) WriteGobData(v interface{}) {
+	buffer := new(bytes.Buffer)
+	enc := gob.NewEncoder(buffer)
+	if err := enc.Encode(v); err != nil {
+		panic(err)
+	}
+	nb.WriteDataWithHead(buffer.Bytes())
+}
+
+//读取一个data以"encoding/gob"解码到v(a pointer interface{})中 用于golang进程间通信
+func (nb *nbuffer) ReadGobData(v interface{}) {
+	enc := gob.NewDecoder(bytes.NewReader(nb.ReadDataWithHead()))
+	if err := enc.Decode(v); err != nil {
+		panic(err)
+	}
 }
 
 func (nb *nbuffer) String() string {

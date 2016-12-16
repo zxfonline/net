@@ -29,7 +29,7 @@ var Session chan nbtcp.IoBuffer
 
 var fmt *log.Logger
 
-func main() {
+func main2() {
 	Session = make(chan nbtcp.IoBuffer, 10000)
 	if wc, err := fileutil.OpenFile("./trace.txt", os.O_TRUNC|os.O_CREATE|os.O_WRONLY, fileutil.DefaultFileMode); err == nil {
 		fmt = log.New(wc, "", 0)
@@ -106,7 +106,7 @@ func main() {
 
 func NewAccessHandler(port int32, actimer *timer.Timer) *AccessHandler {
 	if actimer == nil {
-		actimer = timer.GTimer
+		actimer = timer.GTimer()
 	}
 	h := new(AccessHandler)
 	h.entryMap = make(map[int64]entry)
@@ -230,7 +230,6 @@ func (e *entry) clear() {
 func (e *entry) syncAccess(data nbtcp.IoBuffer, timeout time.Duration) (bb nbtcp.IoBuffer, err error) {
 	h := e.h
 	out := transport.NewCapBuffer(data.Port(), 12+data.Len())
-	out.Cache(true)
 	out.WriteInt64(e.mid)
 	out.WriteInt32(h.Port())
 	out.WriteBuffer(data)
@@ -247,7 +246,6 @@ func (e *entry) syncAccess(data nbtcp.IoBuffer, timeout time.Duration) (bb nbtcp
 		//		time.Sleep(time.Duration(sl) * time.Millisecond)
 		wcap := 16
 		rbb := transport.NewCapBuffer(rtport, wcap)
-		rbb.Cache(true)
 		rbb.WriteInt64(mid)
 		rbb.WriteInt32(in.Port())
 		//1
@@ -255,7 +253,7 @@ func (e *entry) syncAccess(data nbtcp.IoBuffer, timeout time.Duration) (bb nbtcp
 		//2
 		//		ae := gerror.NewError(gerror.SERVER_ACCESS_REFUSED, "服务器拒绝该项访问")
 		//		rbb.WriteInt32(ae.Code)
-		//		rbb.WriteStr(ae.Content)
+		//		rbb.WriteString(ae.Content)
 		Session <- rbb
 	}(out)
 	defer func() {
@@ -280,7 +278,7 @@ func (e *entry) parseData(data nbtcp.IoBuffer) (nbtcp.IoBuffer, error) {
 	if errorType == gerror.OK {
 		return data, nil
 	}
-	detail := data.ReadStr()
+	detail := data.ReadString()
 	return nil, gerror.NewError(errorType, detail)
 }
 
@@ -289,7 +287,6 @@ func (e *entry) asyncAccess(data nbtcp.IoBuffer, timeout time.Duration) {
 	start := time.Now()
 	h := e.h
 	out := transport.NewCapBuffer(data.Port(), 12+data.Len())
-	out.Cache(true)
 	out.WriteInt64(e.mid)
 	out.WriteInt32(h.Port())
 	out.WriteBuffer(data)
@@ -322,7 +319,6 @@ func (e *entry) asyncAccess(data nbtcp.IoBuffer, timeout time.Duration) {
 		time.Sleep(time.Duration(sl) * time.Millisecond)
 		wcap := 16
 		rbb := transport.NewCapBuffer(rtport, wcap)
-		rbb.Cache(true)
 		rbb.WriteInt64(mid)
 		rbb.WriteInt32(in.Port())
 		//1
@@ -330,7 +326,7 @@ func (e *entry) asyncAccess(data nbtcp.IoBuffer, timeout time.Duration) {
 		//2
 		//		ae := gerror.NewError(gerror.SERVER_ACCESS_REFUSED, "服务器拒绝该项访问")
 		//		rbb.WriteInt32(ae.Code)
-		//		rbb.WriteStr(ae.Content)
+		//		rbb.WriteString(ae.Content)
 		Session <- rbb
 	}(out)
 }

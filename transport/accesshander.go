@@ -39,7 +39,7 @@ func InitDataAccessHandler(port int32, actimer *timer.Timer) {
 }
 func NewAccessHandler(port int32, actimer *timer.Timer) *AccessHandler {
 	if actimer == nil {
-		actimer = timer.GTimer
+		actimer = timer.GTimer()
 	}
 	h := new(AccessHandler)
 	h.Logger = golog.New("DataAccessHandler")
@@ -47,7 +47,7 @@ func NewAccessHandler(port int32, actimer *timer.Timer) *AccessHandler {
 	h.port = port
 	h.actimer = actimer
 	//收到代理消息回包处理方法
-	h.Handler = func(session nbtcp.IoSession, data nbtcp.IoBuffer) {
+	h.Handler = func(session nbtcp.IoSession, data nbtcp.IoBuffer, logger *golog.Logger) {
 		mid := data.ReadInt64()
 		port := data.ReadInt32()
 		h.lock.RLock()
@@ -216,7 +216,6 @@ func (e *entry) clear() {
 func (e *entry) syncAccess(data nbtcp.IoBuffer, timeout time.Duration) (bb nbtcp.IoBuffer, err error) {
 	h := e.h
 	out := NewCapBuffer(data.Port(), 12+data.Len())
-	out.Cache(true)
 	out.WriteInt64(e.mid)
 	out.WriteInt32(h.Port())
 	out.WriteBuffer(data)
@@ -258,7 +257,7 @@ func (e *entry) parseData(data nbtcp.IoBuffer) (nbtcp.IoBuffer, error) {
 	if errorType == gerror.OK {
 		return data, nil
 	}
-	detail := data.ReadStr()
+	detail := data.ReadString()
 	return nil, gerror.NewError(errorType, detail)
 }
 
@@ -266,7 +265,6 @@ func (e *entry) parseData(data nbtcp.IoBuffer) (nbtcp.IoBuffer, error) {
 func (e *entry) asyncAccess(data nbtcp.IoBuffer, timeout time.Duration) {
 	h := e.h
 	out := NewCapBuffer(data.Port(), 12+data.Len())
-	out.Cache(true)
 	out.WriteInt64(e.mid)
 	out.WriteInt32(h.Port())
 	out.WriteBuffer(data)

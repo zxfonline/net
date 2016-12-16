@@ -4,6 +4,7 @@
 package nbtcp
 
 import (
+	"io"
 	"net"
 
 	"golang.org/x/net/trace"
@@ -69,10 +70,18 @@ type IoSession interface {
 	Write(interface{})
 	//初始化加密
 	InitEncrypt(token int64)
+	//设置连接数据源
+	SetSource(interface{})
+	//获取连接数据源
+	GetSource() interface{}
 }
 
 //io消息封装器
 type IoBuffer interface {
+	io.ReaderFrom
+	io.WriterTo
+	io.Reader
+	io.Writer
 	//收到消息的时间
 	GetRcvt() int64
 	//收到消息的时间
@@ -107,6 +116,8 @@ type IoBuffer interface {
 	Bytes() []byte
 	//可读数据长度
 	Len() int
+	//字节缓存容量
+	Cap() int
 	//数据重置
 	Reset() IoBuffer
 
@@ -115,11 +126,11 @@ type IoBuffer interface {
 	//写入buffer中未读的字节，不包含了长度头
 	WriteBuffer(IoBuffer)
 	//写入字节数组，包含了长度头
-	WriteHeadData([]byte)
+	WriteDataWithHead([]byte)
 	//写入buffer中未读的字节，包含了长度头
-	WriteHeadBuffer(IoBuffer)
+	WriteBufferWithHead(IoBuffer)
 	//读取字节数据，通过读取字节头判断字节长度
-	ReadHeadData() []byte
+	ReadDataWithHead() []byte
 
 	ReadInt8() int8
 	ReadUint8() uint8
@@ -129,10 +140,9 @@ type IoBuffer interface {
 	ReadUint32() uint32
 	ReadInt64() int64
 	ReadUint64() uint64
-	ReadStr() string
+	ReadString() string
 	ReadBool() bool
 	ReadByte() byte
-	UnreadByte()
 	ReadFloat32() float32
 	ReadFloat64() float64
 
@@ -144,11 +154,15 @@ type IoBuffer interface {
 	WriteUint32(uint32)
 	WriteInt64(int64)
 	WriteUint64(uint64)
-	WriteStr(string)
+	WriteString(string)
 	WriteBool(bool)
 	WriteByte(byte)
 	WriteFloat32(float32)
 	WriteFloat64(float64)
+	//将interface通过"encoding/gob"编码写入到buffer中 用于golang进程间通信
+	WriteGobData(interface{})
+	//读取一个data以"encoding/gob"解码到v(a pointer interface{})中 用于golang进程间通信
+	ReadGobData(interface{})
 
 	String() string
 
