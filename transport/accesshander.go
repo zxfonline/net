@@ -11,6 +11,8 @@ import (
 
 	"github.com/zxfonline/timefix"
 
+	. "github.com/zxfonline/net/packet"
+
 	"github.com/zxfonline/gerror"
 	"github.com/zxfonline/golog"
 	"github.com/zxfonline/net/nbtcp"

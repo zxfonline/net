@@ -10,6 +10,11 @@ import (
 	"golang.org/x/net/trace"
 )
 
+//连接提供器
+type ConnectProducer interface {
+	GetConnect() IoSession
+}
+
 //消息处理器
 type MsgHandler interface {
 	//消息处理方法(外部捕获异常，一般都是将连接关闭)
@@ -131,6 +136,8 @@ type IoBuffer interface {
 	WriteBufferWithHead(IoBuffer)
 	//读取字节数据，通过读取字节头判断字节长度
 	ReadDataWithHead() []byte
+	//读取所有剩余字节数据
+	ReadData() []byte
 
 	ReadInt8() int8
 	ReadUint8() uint8
@@ -159,10 +166,10 @@ type IoBuffer interface {
 	WriteByte(byte)
 	WriteFloat32(float32)
 	WriteFloat64(float64)
-	//将interface通过"encoding/gob"编码写入到buffer中 用于golang进程间通信
-	WriteGobData(interface{})
-	//读取一个data以"encoding/gob"解码到v(a pointer interface{})中 用于golang进程间通信
-	ReadGobData(interface{})
+	//将 v 编码写入到buffer中 head:是否有消息体长度 (默认使用"github.com/ugorji/go/codec") 查看 zxfonline/net/packet.go
+	WriteBinaryData(v interface{}, head bool)
+	//读取一个data解码到v(a pointer interface{}) head:是否有消息体长度(默认使用"github.com/ugorji/go/codec") 查看 zxfonline/net/packet.go
+	ReadBinaryData(v interface{}, head bool)
 
 	String() string
 

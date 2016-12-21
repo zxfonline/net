@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/zxfonline/net/nbtcp"
+	. "github.com/zxfonline/net/packet"
 	"github.com/zxfonline/taskexcutor"
 	"github.com/zxfonline/timer"
 )

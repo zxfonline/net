@@ -10,6 +10,7 @@ import (
 	"github.com/zxfonline/gerror"
 	"github.com/zxfonline/golog"
 	"github.com/zxfonline/net/nbtcp"
+	. "github.com/zxfonline/net/packet"
 )
 
 //自动回执的消息处理接口

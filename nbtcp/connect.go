@@ -60,7 +60,7 @@ type Connect struct {
 	service  *taskexcutor.TaskService
 
 	//消息发送器
-	sender *Sender
+	sender *sender
 	//连接绑定的的数据源
 	source interface{}
 }
@@ -207,7 +207,7 @@ func (c *Connect) Open(parent context.Context, msgExcutor taskexcutor.Excutor, c
 		c.stopD = chanutil.NewDoneChan()
 		c.cid = cid
 		c.rw = ioc(c.conn, c)
-		c.sender = NewSender(c)
+		c.sender = newsender(c)
 		go c.sender.Start()
 		c.transH = msgProcessor
 

@@ -15,6 +15,7 @@ import (
 	"github.com/zxfonline/buffpool"
 	"github.com/zxfonline/gerror"
 	"github.com/zxfonline/net/nbtcp"
+	. "github.com/zxfonline/net/packet"
 	. "github.com/zxfonline/trace"
 	"golang.org/x/net/trace"
 )

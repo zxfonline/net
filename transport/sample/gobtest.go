@@ -5,7 +5,7 @@ import (
 	"encoding/gob"
 	"fmt"
 
-	"github.com/zxfonline/net/transport"
+	. "github.com/zxfonline/net/packet"
 )
 
 func GobEncode(v interface{}) []byte {
@@ -33,31 +33,31 @@ func main() {
 	fmt.Printf("%+v: {%d,%d}\n", q.Name, *q.X, *q.Y)
 
 	fmt.Println("---------")
-	bb := transport.NewBuffer(1, nil)
-	//	bb.WriteGobData(&P{3, 4, 5, "Pythagoras"})
-	bb.WriteGobData(P{3, 4, 5, "Pythagoras"})
+	bb := NewBuffer(1, nil)
+	//	bb.WriteBinaryData(&P{3, 4, 5, "Pythagoras"})
+	bb.WriteBinaryData(P{3, 4, 5, "Pythagoras"})
 	q2 := new(Q)
 	fmt.Printf("%p\n", q2)
-	bb.ReadGobData(q2)
+	bb.ReadBinaryData(q2)
 	fmt.Printf("%+v: {%d,%d}\n", q2.Name, *q2.X, *q2.Y)
 	fmt.Printf("%p\n", q2)
 
 	fmt.Println("---------")
 	arr := []int16{1, 2, 3, 4, 5, 6}
-	bb.WriteGobData(arr)
+	bb.WriteBinaryData(arr)
 	var arr1 []int16
 	fmt.Printf("%p\n", arr1)
-	bb.ReadGobData(&arr1)
+	bb.ReadBinaryData(&arr1)
 	fmt.Printf("%v %v %v\n", arr1, len(arr1), cap(arr1))
 	fmt.Printf("%p\n", arr1)
 	fmt.Println("---------")
 	arr2 := make(map[int]string)
 	arr2[1] = "1"
 	arr2[2] = "2"
-	bb.WriteGobData(arr2)
+	bb.WriteBinaryData(arr2)
 	arr21 := make(map[int]string)
 	fmt.Printf("%p\n", arr21)
-	bb.ReadGobData(&arr21)
+	bb.ReadBinaryData(&arr21)
 	fmt.Printf("%v %v\n", arr21, len(arr21))
 	fmt.Printf("%p\n", arr21)
 	fmt.Println("---------")
@@ -109,9 +109,9 @@ func TestPack() {
 	test.Sub[1].I = 8192
 	test.S2.H = 100
 	test.S3.M = make([]int16, 10)
-	bb := transport.NewBuffer(1, nil)
-	bb.WriteGobData(test)
+	bb := NewBuffer(1, nil)
+	bb.WriteBinaryData(test)
 	test1 := new(TEST)
-	bb.ReadGobData(test1)
+	bb.ReadBinaryData(test1)
 	fmt.Printf("%+v\n", test1)
 }

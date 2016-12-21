@@ -1,12 +1,11 @@
 // Copyright 2016 zxfonline@sina.com. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
-package transport
+package packet
 
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/gob"
 	"fmt"
 	"io"
 	"math"
@@ -21,27 +20,12 @@ import (
 	"golang.org/x/net/trace"
 )
 
-//默认字节序 大端法
-var DefaultEndian = binary.BigEndian
-
 //消息唯一id生成器
 var uuid int64
 
 //构建消息唯一id
 func createUuid() int64 {
 	return atomic.AddInt64(&uuid, 1)
-}
-
-func NewBuffer(port int32, buf []byte) nbtcp.IoBuffer {
-	b := &nbuffer{port: port, buf: bytes.NewBuffer(buf), uuid: createUuid()}
-	return b
-}
-
-func NewCapBuffer(port int32, caps int) nbtcp.IoBuffer {
-	buf := buffpool.BufGet(caps)
-	buf = buf[:0]
-	b := &nbuffer{port: port, buf: bytes.NewBuffer(buf), uuid: createUuid()}
-	return b
 }
 
 type nbuffer struct {
@@ -144,6 +128,18 @@ func (nb *nbuffer) WriteBufferWithHead(io nbtcp.IoBuffer) {
 	nb.WriteDataWithHead(io.Bytes())
 }
 
+func (nb *nbuffer) ReadData() []byte {
+	n := nb.Len()
+	bb := buffpool.BufGet(n)
+	if n == 0 {
+		return bb
+	}
+	err := binary.Read(nb.buf, DefaultEndian, bb)
+	if err != nil {
+		panic(err)
+	}
+	return bb
+}
 func (nb *nbuffer) ReadDataWithHead() []byte {
 	n := nb.readLength()
 	bb := buffpool.BufGet(n)
@@ -439,22 +435,12 @@ func (nb *nbuffer) Write(p []byte) (int, error) {
 	return nb.buf.Write(p)
 }
 
-//将interface通过"encoding/gob"编码写入到buffer中 用于golang进程间通信
-func (nb *nbuffer) WriteGobData(v interface{}) {
-	buffer := new(bytes.Buffer)
-	enc := gob.NewEncoder(buffer)
-	if err := enc.Encode(v); err != nil {
-		panic(err)
-	}
-	nb.WriteDataWithHead(buffer.Bytes())
+func (nb *nbuffer) WriteBinaryData(v interface{}, head bool) {
+	Default_Serialization(nb, v, head)
 }
 
-//读取一个data以"encoding/gob"解码到v(a pointer interface{})中 用于golang进程间通信
-func (nb *nbuffer) ReadGobData(v interface{}) {
-	enc := gob.NewDecoder(bytes.NewReader(nb.ReadDataWithHead()))
-	if err := enc.Decode(v); err != nil {
-		panic(err)
-	}
+func (nb *nbuffer) ReadBinaryData(v interface{}, head bool) {
+	Default_DeSerialization(nb, v, head)
 }
 
 func (nb *nbuffer) String() string {

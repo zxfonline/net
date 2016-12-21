@@ -13,6 +13,7 @@ import (
 	"github.com/zxfonline/fileutil"
 	"github.com/zxfonline/gerror"
 	"github.com/zxfonline/net/nbtcp"
+	. "github.com/zxfonline/net/packet"
 	"github.com/zxfonline/net/transport"
 	"github.com/zxfonline/taskexcutor"
 )
@@ -55,7 +56,7 @@ func main2() {
 			wg.Add(tt)
 			//		go func(i int) {
 			for j := 0; j < tt; j++ {
-				proxyBf := transport.NewCapBuffer(int32(i), 4)
+				proxyBf := NewCapBuffer(int32(i), 4)
 				proxyBf.WriteInt32(int32(j))
 				DataAccessHandler.AsyncAccess(proxyBf, taskexcutor.NewTaskService(func(params ...interface{}) {
 					i := (params[0]).(int)
@@ -90,7 +91,7 @@ func main2() {
 			wg.Add(1)
 			go func(i int) {
 				for j := 0; j < tt; j++ {
-					proxyBf := transport.NewCapBuffer(int32(i), 4)
+					proxyBf := NewCapBuffer(int32(i), 4)
 					proxyBf.WriteInt32(int32(j))
 					DataAccessHandler.SyncAccess(proxyBf, 15*time.Second)
 				}
@@ -125,7 +126,7 @@ type AccessHandler struct {
 func (h *AccessHandler) Transmit(data nbtcp.IoBuffer) {
 	mid := data.ReadInt64()
 	rqport := data.ReadInt32()
-	pb := transport.NewBuffer(rqport, data.Bytes())
+	pb := NewBuffer(rqport, data.Bytes())
 	h.lock.RLock()
 	if e, ok := h.entryMap[mid]; ok {
 		h.lock.RUnlock()
@@ -229,7 +230,7 @@ func (e *entry) clear() {
 //网络代理发送数据
 func (e *entry) syncAccess(data nbtcp.IoBuffer, timeout time.Duration) (bb nbtcp.IoBuffer, err error) {
 	h := e.h
-	out := transport.NewCapBuffer(data.Port(), 12+data.Len())
+	out := NewCapBuffer(data.Port(), 12+data.Len())
 	out.WriteInt64(e.mid)
 	out.WriteInt32(h.Port())
 	out.WriteBuffer(data)
@@ -245,7 +246,7 @@ func (e *entry) syncAccess(data nbtcp.IoBuffer, timeout time.Duration) (bb nbtcp
 		//		fmt.Printf("receive data=%d,sleep=%+v\n", mid, sl)
 		//		time.Sleep(time.Duration(sl) * time.Millisecond)
 		wcap := 16
-		rbb := transport.NewCapBuffer(rtport, wcap)
+		rbb := NewCapBuffer(rtport, wcap)
 		rbb.WriteInt64(mid)
 		rbb.WriteInt32(in.Port())
 		//1
@@ -286,7 +287,7 @@ func (e *entry) parseData(data nbtcp.IoBuffer) (nbtcp.IoBuffer, error) {
 func (e *entry) asyncAccess(data nbtcp.IoBuffer, timeout time.Duration) {
 	start := time.Now()
 	h := e.h
-	out := transport.NewCapBuffer(data.Port(), 12+data.Len())
+	out := NewCapBuffer(data.Port(), 12+data.Len())
 	out.WriteInt64(e.mid)
 	out.WriteInt32(h.Port())
 	out.WriteBuffer(data)
@@ -318,7 +319,7 @@ func (e *entry) asyncAccess(data nbtcp.IoBuffer, timeout time.Duration) {
 		//		fmt.Printf("receive data=%d,sleep=%+v\n", mid, sl)
 		time.Sleep(time.Duration(sl) * time.Millisecond)
 		wcap := 16
-		rbb := transport.NewCapBuffer(rtport, wcap)
+		rbb := NewCapBuffer(rtport, wcap)
 		rbb.WriteInt64(mid)
 		rbb.WriteInt32(in.Port())
 		//1

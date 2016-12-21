@@ -15,10 +15,6 @@ import (
 	"github.com/zxfonline/timer"
 )
 
-//连接提供器
-type ConnectProducer interface {
-	GetConnect() IoSession
-}
 type TcpConnectProducer struct {
 	name          string
 	clientFactory *ConnectClientFactory
