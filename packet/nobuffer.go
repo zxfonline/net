@@ -14,7 +14,6 @@ import (
 	"sync/atomic"
 
 	"github.com/zxfonline/buffpool"
-	"github.com/zxfonline/net/nbtcp"
 	"github.com/zxfonline/timefix"
 	. "github.com/zxfonline/trace"
 	"golang.org/x/net/trace"
@@ -29,8 +28,8 @@ func createUuid() int64 {
 }
 
 type nbuffer struct {
-	port      int32
-	rcvPort   int32
+	port      MsgType
+	rcvPort   MsgType
 	connectId int64
 	buf       *bytes.Buffer
 	cache     bool
@@ -66,7 +65,7 @@ func (nb *nbuffer) SetConnectID(cid int64) {
 	nb.connectId = cid
 }
 
-func (nb *nbuffer) Reset() nbtcp.IoBuffer {
+func (nb *nbuffer) Reset() IoBuffer {
 	nb.buf.Reset()
 	return nb
 }
@@ -84,23 +83,23 @@ func (nb *nbuffer) Bytes() []byte {
 func (nb *nbuffer) Cached() bool {
 	return nb.cache
 }
-func (nb *nbuffer) Cache(cache bool) nbtcp.IoBuffer {
+func (nb *nbuffer) Cache(cache bool) IoBuffer {
 	nb.cache = cache
 	return nb
 }
 
-func (nb *nbuffer) Port() int32 {
+func (nb *nbuffer) Port() MsgType {
 	return nb.port
 }
 
 //消息包复用，一般处理完消息后直接复用该消息包，更改消息传输类型并填充数据回执给请求方
-func (nb *nbuffer) SetPort(port int32) {
+func (nb *nbuffer) SetPort(port MsgType) {
 	nb.port = port
 }
-func (nb *nbuffer) RcvPort() int32 {
+func (nb *nbuffer) RcvPort() MsgType {
 	return nb.rcvPort
 }
-func (nb *nbuffer) SetRcvPort(rcvPort int32) {
+func (nb *nbuffer) SetRcvPort(rcvPort MsgType) {
 	nb.rcvPort = rcvPort
 }
 
@@ -113,7 +112,7 @@ func (nb *nbuffer) WriteData(bb []byte) {
 }
 
 //写入buffer中未读的字节，不包含了长度头
-func (nb *nbuffer) WriteBuffer(io nbtcp.IoBuffer) {
+func (nb *nbuffer) WriteBuffer(io IoBuffer) {
 	nb.WriteData(io.Bytes())
 }
 
@@ -124,7 +123,7 @@ func (nb *nbuffer) WriteDataWithHead(bb []byte) {
 }
 
 //写入buffer中未读的字节，包含了长度头
-func (nb *nbuffer) WriteBufferWithHead(io nbtcp.IoBuffer) {
+func (nb *nbuffer) WriteBufferWithHead(io IoBuffer) {
 	nb.WriteDataWithHead(io.Bytes())
 }
 

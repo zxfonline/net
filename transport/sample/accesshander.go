@@ -12,9 +12,7 @@ import (
 
 	"github.com/zxfonline/fileutil"
 	"github.com/zxfonline/gerror"
-	"github.com/zxfonline/net/nbtcp"
 	. "github.com/zxfonline/net/packet"
-	"github.com/zxfonline/net/transport"
 	"github.com/zxfonline/taskexcutor"
 )
 
@@ -25,22 +23,22 @@ func randInt(min int32, max int32) int32 {
 
 var ACCESS_TIMEOUT = gerror.NewError(gerror.CLIENT_TIMEOUT, "proxy access timeout")
 
-var DataAccessHandler = NewAccessHandler(transport.ACCESS_RETURN_PORT, nil)
-var Session chan nbtcp.IoBuffer
+var DataAccessHandler = NewAccessHandler(ACCESS_RETURN_PORT, nil)
+var Session chan IoBuffer
 
-var fmt *log.Logger
+var logger *log.Logger
 
 func main2() {
-	Session = make(chan nbtcp.IoBuffer, 10000)
+	Session = make(chan IoBuffer, 10000)
 	if wc, err := fileutil.OpenFile("./trace.txt", os.O_TRUNC|os.O_CREATE|os.O_WRONLY, fileutil.DefaultFileMode); err == nil {
-		fmt = log.New(wc, "", 0)
+		logger = log.New(wc, "", 0)
 	}
-	fmt.Println("start")
+	logger.Println("start")
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	start := time.Now()
 	defer func(start time.Time) {
-		fmt.Printf("over total cost=%s, start=%s,end=%s\n", time.Now().Sub(start), start, time.Now())
+		logger.Printf("over total cost=%s, start=%s,end=%s\n", time.Now().Sub(start), start, time.Now())
 	}(start)
 
 	go func() {
@@ -56,7 +54,7 @@ func main2() {
 			wg.Add(tt)
 			//		go func(i int) {
 			for j := 0; j < tt; j++ {
-				proxyBf := NewCapBuffer(int32(i), 4)
+				proxyBf := NewCapBuffer(MsgType(i), 4)
 				proxyBf.WriteInt32(int32(j))
 				DataAccessHandler.AsyncAccess(proxyBf, taskexcutor.NewTaskService(func(params ...interface{}) {
 					i := (params[0]).(int)
@@ -64,14 +62,14 @@ func main2() {
 					wg := (params[2]).(*sync.WaitGroup)
 					ls := len(params)
 					var err error
-					var data nbtcp.IoBuffer
+					var data IoBuffer
 					if params[ls-1] != nil {
 						err = params[ls-1].(error)
 					} else if params[ls-2] != nil {
-						data = params[ls-2].(nbtcp.IoBuffer)
+						data = params[ls-2].(IoBuffer)
 					}
 					start := params[3].(time.Time)
-					fmt.Printf("over access cost=%s, start=%s,end=%s callback return i=%v,j=%v,data=%v,err=%v\n", time.Now().Sub(start), start, time.Now(), i, j, data, err)
+					logger.Printf("over access cost=%s, start=%s,end=%s callback return i=%v,j=%v,data=%v,err=%v\n", time.Now().Sub(start), start, time.Now(), i, j, data, err)
 
 					if err != nil { //请求错误，后续逻辑
 
@@ -91,7 +89,7 @@ func main2() {
 			wg.Add(1)
 			go func(i int) {
 				for j := 0; j < tt; j++ {
-					proxyBf := NewCapBuffer(int32(i), 4)
+					proxyBf := NewCapBuffer(MsgType(i), 4)
 					proxyBf.WriteInt32(int32(j))
 					DataAccessHandler.SyncAccess(proxyBf, 15*time.Second)
 				}
@@ -102,10 +100,10 @@ func main2() {
 
 	wg.Done()
 	wg.Wait()
-	fmt.Println("over")
+	logger.Println("over")
 }
 
-func NewAccessHandler(port int32, actimer *timer.Timer) *AccessHandler {
+func NewAccessHandler(port MsgType, actimer *timer.Timer) *AccessHandler {
 	if actimer == nil {
 		actimer = timer.GTimer()
 	}
@@ -117,15 +115,15 @@ func NewAccessHandler(port int32, actimer *timer.Timer) *AccessHandler {
 }
 
 type AccessHandler struct {
-	port     int32
+	port     MsgType
 	lock     sync.RWMutex
 	actimer  *timer.Timer
 	entryMap map[int64]entry
 }
 
-func (h *AccessHandler) Transmit(data nbtcp.IoBuffer) {
+func (h *AccessHandler) Transmit(data IoBuffer) {
 	mid := data.ReadInt64()
-	rqport := data.ReadInt32()
+	rqport := MsgType(data.ReadInt32())
 	pb := NewBuffer(rqport, data.Bytes())
 	h.lock.RLock()
 	if e, ok := h.entryMap[mid]; ok {
@@ -154,24 +152,24 @@ func (h *AccessHandler) Transmit(data nbtcp.IoBuffer) {
 		}
 	} else {
 		h.lock.RUnlock()
-		fmt.Printf("超时后收到回包，不处理回包。data=%d,%+v\n", pb.Port(), pb)
+		logger.Printf("超时后收到回包，不处理回包。data=%d,%+v\n", pb.Port(), pb)
 	}
 }
 
-func (h *AccessHandler) SyncAccess(data nbtcp.IoBuffer, timeout time.Duration) (rb nbtcp.IoBuffer, err error) {
+func (h *AccessHandler) SyncAccess(data IoBuffer, timeout time.Duration) (rb IoBuffer, err error) {
 	start := time.Now()
 	defer func(start time.Time) {
-		fmt.Printf("over access cost=%s, start=%s,end=%s block return value=%+v,err=%v\n", time.Now().Sub(start), start, time.Now(), rb, err)
+		logger.Printf("over access cost=%s, start=%s,end=%s block return value=%+v,err=%v\n", time.Now().Sub(start), start, time.Now(), rb, err)
 	}(start)
 	rb, err = newSyncEntry(data.ConnectID(), h).syncAccess(data, timeout)
 	return
 }
 
-func (h *AccessHandler) AsyncAccess(data nbtcp.IoBuffer, callback *taskexcutor.TaskService, timeout time.Duration) {
+func (h *AccessHandler) AsyncAccess(data IoBuffer, callback *taskexcutor.TaskService, timeout time.Duration) {
 	newAsyncEntry(data.ConnectID(), h, callback).asyncAccess(data, timeout)
 }
 
-func (h *AccessHandler) Port() int32 {
+func (h *AccessHandler) Port() MsgType {
 	return h.port
 }
 
@@ -193,7 +191,7 @@ func createAmId() int64 {
 
 type entry struct {
 	h        *AccessHandler
-	waitChan chan nbtcp.IoBuffer
+	waitChan chan IoBuffer
 	//唯一消息号(正数表示同步请求消息号，负数表示异步请求消息号)
 	mid      int64
 	connId   int64
@@ -206,7 +204,7 @@ func newSyncEntry(connId int64, h *AccessHandler) *entry {
 		h:        h,
 		mid:      createMId(),
 		connId:   connId,
-		waitChan: make(chan nbtcp.IoBuffer, 1),
+		waitChan: make(chan IoBuffer, 1),
 	}
 }
 func newAsyncEntry(connId int64, h *AccessHandler, callback *taskexcutor.TaskService) *entry {
@@ -228,29 +226,29 @@ func (e *entry) clear() {
 }
 
 //网络代理发送数据
-func (e *entry) syncAccess(data nbtcp.IoBuffer, timeout time.Duration) (bb nbtcp.IoBuffer, err error) {
+func (e *entry) syncAccess(data IoBuffer, timeout time.Duration) (bb IoBuffer, err error) {
 	h := e.h
 	out := NewCapBuffer(data.Port(), 12+data.Len())
 	out.WriteInt64(e.mid)
-	out.WriteInt32(h.Port())
+	out.WriteInt32(h.Port().Value())
 	out.WriteBuffer(data)
 	h.lock.Lock()
 	h.entryMap[e.mid] = *e
 	h.lock.Unlock()
 
-	go func(in nbtcp.IoBuffer) {
+	go func(in IoBuffer) {
 		//模仿网络通信,接收端收到消息
 		mid := in.ReadInt64()
-		rtport := in.ReadInt32()
+		rtport := MsgType(in.ReadInt32())
 		//		sl := randInt(0.5e3, 2e3)
 		//		fmt.Printf("receive data=%d,sleep=%+v\n", mid, sl)
 		//		time.Sleep(time.Duration(sl) * time.Millisecond)
 		wcap := 16
 		rbb := NewCapBuffer(rtport, wcap)
 		rbb.WriteInt64(mid)
-		rbb.WriteInt32(in.Port())
+		rbb.WriteInt32(in.Port().Value())
 		//1
-		rbb.WriteInt32(gerror.OK)
+		rbb.WriteInt32(gerror.OK.Value())
 		//2
 		//		ae := gerror.NewError(gerror.SERVER_ACCESS_REFUSED, "服务器拒绝该项访问")
 		//		rbb.WriteInt32(ae.Code)
@@ -270,12 +268,12 @@ func (e *entry) syncAccess(data nbtcp.IoBuffer, timeout time.Duration) (bb nbtcp
 		//		fmt.Printf("收到回包，data=%+v,%v,entry=%+v\n", bb, err, e)
 	case <-time.After(timeout):
 		err = ACCESS_TIMEOUT
-		fmt.Printf("代理请求超时了 entry=%+v\n", e.mid)
+		logger.Printf("代理请求超时了 entry=%+v\n", e.mid)
 	}
 	return
 }
-func (e *entry) parseData(data nbtcp.IoBuffer) (nbtcp.IoBuffer, error) {
-	errorType := data.ReadInt32()
+func (e *entry) parseData(data IoBuffer) (IoBuffer, error) {
+	errorType := gerror.ErrorType(data.ReadInt32())
 	if errorType == gerror.OK {
 		return data, nil
 	}
@@ -284,12 +282,12 @@ func (e *entry) parseData(data nbtcp.IoBuffer) (nbtcp.IoBuffer, error) {
 }
 
 //代理消息异步发送，收到消息或者请求超时返回
-func (e *entry) asyncAccess(data nbtcp.IoBuffer, timeout time.Duration) {
+func (e *entry) asyncAccess(data IoBuffer, timeout time.Duration) {
 	start := time.Now()
 	h := e.h
 	out := NewCapBuffer(data.Port(), 12+data.Len())
 	out.WriteInt64(e.mid)
-	out.WriteInt32(h.Port())
+	out.WriteInt32(h.Port().Value())
 	out.WriteBuffer(data)
 	h.lock.Lock()
 	h.entryMap[e.mid] = *e
@@ -310,10 +308,10 @@ func (e *entry) asyncAccess(data nbtcp.IoBuffer, timeout time.Duration) {
 		e.callback.Call(h.actimer.Logger)
 	}, e), "", timeout)
 
-	go func(in nbtcp.IoBuffer) {
+	go func(in IoBuffer) {
 		//模仿网络通信,接收端收到消息
 		mid := in.ReadInt64()
-		rtport := in.ReadInt32()
+		rtport := MsgType(in.ReadInt32())
 
 		sl := randInt(0.5e3, 2e3)
 		//		fmt.Printf("receive data=%d,sleep=%+v\n", mid, sl)
@@ -321,9 +319,9 @@ func (e *entry) asyncAccess(data nbtcp.IoBuffer, timeout time.Duration) {
 		wcap := 16
 		rbb := NewCapBuffer(rtport, wcap)
 		rbb.WriteInt64(mid)
-		rbb.WriteInt32(in.Port())
+		rbb.WriteInt32(in.Port().Value())
 		//1
-		rbb.WriteInt32(gerror.OK)
+		rbb.WriteInt32(gerror.OK.Value())
 		//2
 		//		ae := gerror.NewError(gerror.SERVER_ACCESS_REFUSED, "服务器拒绝该项访问")
 		//		rbb.WriteInt32(ae.Code)

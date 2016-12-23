@@ -14,7 +14,6 @@ import (
 
 	"github.com/zxfonline/buffpool"
 	"github.com/zxfonline/gerror"
-	"github.com/zxfonline/net/nbtcp"
 	. "github.com/zxfonline/net/packet"
 	. "github.com/zxfonline/trace"
 	"golang.org/x/net/trace"
@@ -33,12 +32,12 @@ type msgRWIO struct {
 	familyhead string
 }
 
-func NewMsgRWIO(familyhead string, rw io.ReadWriter, msgMax uint) nbtcp.MsgReadWriter {
+func NewMsgRWIO(familyhead string, rw io.ReadWriter, msgMax uint) MsgReadWriter {
 	return &msgRWIO{familyhead: familyhead, RW: rw, MsgMax: msgMax}
 }
 
-//nbtcp.MsgReader.ReadMsg() len[4]=port[4]+body[n]
-func (rw *msgRWIO) ReadMsg() (data nbtcp.IoBuffer) {
+//MsgReader.ReadMsg() len[4]=port[4]+body[n]
+func (rw *msgRWIO) ReadMsg() (data IoBuffer) {
 	var _l int32
 	err := binary.Read(rw.RW, DefaultEndian, &_l)
 	if err != nil {
@@ -70,8 +69,9 @@ func (rw *msgRWIO) ReadMsg() (data nbtcp.IoBuffer) {
 			panic(err)
 		}
 	}
-	data = NewBuffer(t, m)
-	data.SetRcvPort(t)
+	port := MsgType(t)
+	data = NewBuffer(port, m)
+	data.SetRcvPort(port)
 	data.SetRcvt(timefix.MillisTime())
 	if EnableTracing {
 		data.RegistTraceInfo(trace.New(fmt.Sprintf("%s.port_%d", rw.familyhead, t), "buffer"))
@@ -79,8 +79,8 @@ func (rw *msgRWIO) ReadMsg() (data nbtcp.IoBuffer) {
 	return
 }
 
-//nbtcp.MsgWriter.WriteMsg() len[4]=port[4]+body[n]
-func (rw *msgRWIO) WriteMsg(data nbtcp.IoBuffer) {
+//MsgWriter.WriteMsg() len[4]=port[4]+body[n]
+func (rw *msgRWIO) WriteMsg(data IoBuffer) {
 	data.SetPost(timefix.MillisTime())
 	m := data.Bytes()
 	t := data.Port()
@@ -112,13 +112,13 @@ func (rw *msgRWIO) WriteMsg(data nbtcp.IoBuffer) {
 
 //消息输出追踪读写器
 type msgRWDump struct {
-	rw        nbtcp.MsgReadWriter
-	careAbout func(nbtcp.IoBuffer) bool
+	rw        MsgReadWriter
+	careAbout func(IoBuffer) bool
 	locker    sync.Mutex
 	wc        io.WriteCloser
 }
 
-func NewMsgRWDump(rw nbtcp.MsgReadWriter, careAbout func(nbtcp.IoBuffer) bool) nbtcp.MsgReadWriter {
+func NewMsgRWDump(rw MsgReadWriter, careAbout func(IoBuffer) bool) MsgReadWriter {
 	return &msgRWDump{rw: rw, careAbout: careAbout}
 }
 
@@ -136,7 +136,7 @@ func (rw *msgRWDump) Dump() io.WriteCloser {
 	return rw.wc
 }
 
-//nbtcp.StopNotifier.Close()
+//StopNotifier.Close()
 func (rw *msgRWDump) Close() {
 	rw.locker.Lock()
 	defer rw.locker.Unlock()
@@ -146,15 +146,15 @@ func (rw *msgRWDump) Close() {
 	}
 }
 
-func (rw *msgRWDump) needDump(data nbtcp.IoBuffer) bool {
+func (rw *msgRWDump) needDump(data IoBuffer) bool {
 	if rw.careAbout != nil {
 		return rw.careAbout(data)
 	}
 	return true
 }
 
-//nbtcp.MsgReader.ReadMsg()
-func (rw *msgRWDump) ReadMsg() (data nbtcp.IoBuffer) {
+//MsgReader.ReadMsg()
+func (rw *msgRWDump) ReadMsg() (data IoBuffer) {
 	data = rw.rw.ReadMsg()
 	if !rw.needDump(data) {
 		return
@@ -173,8 +173,8 @@ func (rw *msgRWDump) ReadMsg() (data nbtcp.IoBuffer) {
 	return
 }
 
-//nbtcp.MsgWriter.WriteMsg()
-func (rw *msgRWDump) WriteMsg(data nbtcp.IoBuffer) {
+//MsgWriter.WriteMsg()
+func (rw *msgRWDump) WriteMsg(data IoBuffer) {
 	defer rw.rw.WriteMsg(data)
 	if !rw.needDump(data) {
 		return

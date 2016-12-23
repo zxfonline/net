@@ -11,6 +11,7 @@ import (
 
 	"github.com/zxfonline/chanutil"
 	"github.com/zxfonline/golog"
+	. "github.com/zxfonline/net/packet"
 	"github.com/zxfonline/taskexcutor"
 	"github.com/zxfonline/timer"
 )
@@ -29,15 +30,6 @@ type TcpConnectProducer struct {
 	Logger    *golog.Logger
 }
 
-func NewTcpConnectProducer(name string, clientFactory *ConnectClientFactory, address string) *TcpConnectProducer {
-	p := new(TcpConnectProducer)
-	p.name = name
-	p.clientFactory = clientFactory
-	p.address = address
-	p.closeD = chanutil.NewDoneChan()
-	p.Logger = golog.New(name)
-	return p
-}
 func (p *TcpConnectProducer) Start(tm *timer.Timer, collateTime time.Duration, trigger *taskexcutor.TaskService) {
 	if p.Closed() {
 		return

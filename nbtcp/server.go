@@ -14,17 +14,11 @@ import (
 	"context"
 
 	"github.com/zxfonline/chanutil"
-	"github.com/zxfonline/golog"
+	. "github.com/zxfonline/net/conn"
+	. "github.com/zxfonline/net/packet"
 	"github.com/zxfonline/taskexcutor"
-	. "github.com/zxfonline/trace"
 	"golang.org/x/net/trace"
 )
-
-var (
-	serverLogger *golog.Logger = golog.New("TCP_SERVICE")
-)
-
-const MAXN_RETRY_TIMES = 60
 
 //服务器结构体
 type Server struct {
@@ -46,23 +40,6 @@ type Server struct {
 	quitF            context.CancelFunc
 	stopD            chanutil.DoneChan
 	events           trace.EventLog
-}
-
-//初始化tcp服务器
-func NewServer(wg *sync.WaitGroup, config *ServerConfig, msgProcessor MsgHandler, ioc func(io.ReadWriter, IoSession) MsgReadWriter, iofilterRegister func(IoSession) IoFilterChain, address string) *Server {
-	s := &Server{
-		stopD:            chanutil.NewDoneChan(),
-		config:           config,
-		msgProcessor:     msgProcessor,
-		ioc:              ioc,
-		iofilterRegister: iofilterRegister,
-		wg:               wg,
-		address:          address,
-	}
-	if EnableTracing {
-		s.events = trace.NewEventLog("tcp.Server", address)
-	}
-	return s
 }
 
 //构建连接唯一id

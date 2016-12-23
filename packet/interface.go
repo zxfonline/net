@@ -1,7 +1,7 @@
 // Copyright 2016 zxfonline@sina.com. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
-package nbtcp
+package packet
 
 import (
 	"io"
@@ -104,12 +104,12 @@ type IoBuffer interface {
 	//连接id
 	SetConnectID(int64)
 	//消息包发送类型
-	Port() int32
+	Port() MsgType
 	//消息包复用，一般处理完消息后直接复用该消息包，更改消息传输类型并填充数据回执给请求方
-	SetPort(int32)
+	SetPort(MsgType)
 	//消息包接收类型，初次创建消息包传入的数据包类型
-	RcvPort() int32
-	SetRcvPort(int32)
+	RcvPort() MsgType
+	SetRcvPort(MsgType)
 	//消息唯一id
 	Uuid() int64
 	SetUuid(int64)

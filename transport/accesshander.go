@@ -15,7 +15,6 @@ import (
 
 	"github.com/zxfonline/gerror"
 	"github.com/zxfonline/golog"
-	"github.com/zxfonline/net/nbtcp"
 	"github.com/zxfonline/taskexcutor"
 	"github.com/zxfonline/timer"
 	. "github.com/zxfonline/trace"
@@ -36,22 +35,22 @@ const (
 var DataAccessHandler *AccessHandler
 
 //初始消息代理访问接口
-func InitDataAccessHandler(port int32, actimer *timer.Timer) {
+func InitDataAccessHandler(port MsgType, actimer *timer.Timer) {
 	DataAccessHandler = NewAccessHandler(port, actimer)
 }
-func NewAccessHandler(port int32, actimer *timer.Timer) *AccessHandler {
+func NewAccessHandler(port MsgType, actimer *timer.Timer) *AccessHandler {
 	if actimer == nil {
 		actimer = timer.GTimer()
 	}
 	h := new(AccessHandler)
-	h.Logger = golog.New("DataAccessHandler")
+	h.Logger = golog.New(port.String())
 	h.entryMap = make(map[int64]entry)
 	h.port = port
 	h.actimer = actimer
 	//收到代理消息回包处理方法
-	h.Handler = func(session nbtcp.IoSession, data nbtcp.IoBuffer, logger *golog.Logger) {
+	h.Handler = func(session IoSession, data IoBuffer, logger *golog.Logger) {
 		mid := data.ReadInt64()
-		port := data.ReadInt32()
+		port := MsgType(data.ReadInt32())
 		h.lock.RLock()
 		if e, ok := h.entryMap[mid]; ok {
 			h.lock.RUnlock()
@@ -99,7 +98,7 @@ func NewAccessHandler(port int32, actimer *timer.Timer) *AccessHandler {
 //代理消息阻塞访问处理器(接收端使用ProxyCallBackHandler子类来处理消息)
 type AccessHandler struct {
 	SafeTransmitHandler
-	port     int32
+	port     MsgType
 	lock     sync.RWMutex
 	actimer  *timer.Timer
 	entryMap map[int64]entry
@@ -115,7 +114,7 @@ type AccessHandler struct {
  * data:代理连接处理的消息包
  * timeout:访问代理请求超时时间(当传入0时表示使用默认时间 DEFAULT_ACCESS_TIMEOUT)
  */
-func (h *AccessHandler) SyncAccess(proxySession nbtcp.IoSession, data nbtcp.IoBuffer, timeout time.Duration) (nbtcp.IoBuffer, error) {
+func (h *AccessHandler) SyncAccess(proxySession IoSession, data IoBuffer, timeout time.Duration) (IoBuffer, error) {
 	if timeout == 0 {
 		timeout = DEFAULT_ACCESS_TIMEOUT
 	}
@@ -126,14 +125,14 @@ func (h *AccessHandler) SyncAccess(proxySession nbtcp.IoSession, data nbtcp.IoBu
  *超时后如果没有回执消息抛出通讯超时异常
  * proxySession:远程连接
  * data:代理连接处理的消息包
- * callback:收到消息或者请求超时回调函数，默认最后两个参数顺序为(...,data nbtcp.IoBuffer, err error),构建时传入的参数顺序不变
+ * callback:收到消息或者请求超时回调函数，默认最后两个参数顺序为(...,data IoBuffer, err error),构建时传入的参数顺序不变
  *	ls := len(params)
 *	var err error
-*	var data nbtcp.IoBuffer
+*	var data IoBuffer
 *	if params[ls-1] != nil {
 *		err = params[ls-1].(error)
 *	} else if params[ls-2] != nil {
-*		data = params[ls-2].(nbtcp.IoBuffer)
+*		data = params[ls-2].(IoBuffer)
 *	}
 *	//data 永远不会为空，只能通过err是否为空来判断消息是否成功
 *	if err != nil { //请求错误，后续逻辑
@@ -145,14 +144,14 @@ func (h *AccessHandler) SyncAccess(proxySession nbtcp.IoSession, data nbtcp.IoBu
 *
  * timeout:访问代理请求超时时间(当传入0时表示使用默认时间 DEFAULT_ACCESS_TIMEOUT)
 */
-func (h *AccessHandler) AsyncAccess(proxySession nbtcp.IoSession, data nbtcp.IoBuffer, callback *taskexcutor.TaskService, timeout time.Duration) {
+func (h *AccessHandler) AsyncAccess(proxySession IoSession, data IoBuffer, callback *taskexcutor.TaskService, timeout time.Duration) {
 	if timeout == 0 {
 		timeout = DEFAULT_ACCESS_TIMEOUT
 	}
 	newAsyncEntry(proxySession, data.ConnectID(), h, callback).asyncAccess(data, timeout)
 }
 
-func (h *AccessHandler) Port() int32 {
+func (h *AccessHandler) Port() MsgType {
 	return h.port
 }
 
@@ -176,24 +175,24 @@ type entry struct {
 	//唯一消息号(正数表示同步请求消息号，负数表示异步请求消息号)
 	mid int64
 	//消息所有者
-	session  nbtcp.IoSession
+	session  IoSession
 	connId   int64
 	h        *AccessHandler
-	waitChan chan nbtcp.IoBuffer
+	waitChan chan IoBuffer
 	callback *taskexcutor.TaskService
 	event    *timer.TimerEvent
 }
 
-func newSyncEntry(session nbtcp.IoSession, connId int64, h *AccessHandler) *entry {
+func newSyncEntry(session IoSession, connId int64, h *AccessHandler) *entry {
 	return &entry{
 		h:        h,
 		mid:      createMId(),
 		session:  session,
 		connId:   connId,
-		waitChan: make(chan nbtcp.IoBuffer, 1),
+		waitChan: make(chan IoBuffer, 1),
 	}
 }
-func newAsyncEntry(session nbtcp.IoSession, connId int64, h *AccessHandler, callback *taskexcutor.TaskService) *entry {
+func newAsyncEntry(session IoSession, connId int64, h *AccessHandler, callback *taskexcutor.TaskService) *entry {
 	return &entry{
 		h:        h,
 		mid:      createAmId(),
@@ -215,11 +214,11 @@ func (e *entry) clear() {
 }
 
 //代理消息阻塞发送，收到消息或者请求超时返回
-func (e *entry) syncAccess(data nbtcp.IoBuffer, timeout time.Duration) (bb nbtcp.IoBuffer, err error) {
+func (e *entry) syncAccess(data IoBuffer, timeout time.Duration) (bb IoBuffer, err error) {
 	h := e.h
 	out := NewCapBuffer(data.Port(), 12+data.Len())
 	out.WriteInt64(e.mid)
-	out.WriteInt32(h.Port())
+	out.WriteInt32(h.Port().Value())
 	out.WriteBuffer(data)
 	h.lock.Lock()
 	h.entryMap[e.mid] = *e
@@ -254,8 +253,8 @@ func (e *entry) syncAccess(data nbtcp.IoBuffer, timeout time.Duration) (bb nbtcp
 	}
 	return
 }
-func (e *entry) parseData(data nbtcp.IoBuffer) (nbtcp.IoBuffer, error) {
-	errorType := data.ReadInt32()
+func (e *entry) parseData(data IoBuffer) (IoBuffer, error) {
+	errorType := gerror.ErrorType(data.ReadInt32())
 	if errorType == gerror.OK {
 		return data, nil
 	}
@@ -264,11 +263,11 @@ func (e *entry) parseData(data nbtcp.IoBuffer) (nbtcp.IoBuffer, error) {
 }
 
 //代理消息异步发送，收到消息或者请求超时返回
-func (e *entry) asyncAccess(data nbtcp.IoBuffer, timeout time.Duration) {
+func (e *entry) asyncAccess(data IoBuffer, timeout time.Duration) {
 	h := e.h
 	out := NewCapBuffer(data.Port(), 12+data.Len())
 	out.WriteInt64(e.mid)
-	out.WriteInt32(h.Port())
+	out.WriteInt32(h.Port().Value())
 	out.WriteBuffer(data)
 	h.lock.Lock()
 	h.entryMap[e.mid] = *e
@@ -276,7 +275,7 @@ func (e *entry) asyncAccess(data nbtcp.IoBuffer, timeout time.Duration) {
 	//添加超时事件
 	e.event = h.actimer.AddOnceEvent(taskexcutor.NewTaskService(func(params ...interface{}) {
 		e := (params[1]).(*entry)
-		port := (params[2]).(int32)
+		port := (params[2]).(MsgType)
 		h := e.h
 		if h == nil {
 			return

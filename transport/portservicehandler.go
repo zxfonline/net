@@ -9,37 +9,36 @@ import (
 
 	"github.com/zxfonline/gerror"
 	"github.com/zxfonline/golog"
-	"github.com/zxfonline/net/nbtcp"
 	. "github.com/zxfonline/net/packet"
 )
 
 //自动回执的消息处理接口
-func NewCallBackHandler(logger *golog.Logger, Handler func(nbtcp.IoSession, nbtcp.IoBuffer, *golog.Logger) (nbtcp.IoBuffer, error)) *CallBackHandler {
+func NewCallBackHandler(logger *golog.Logger, Handler func(IoSession, IoBuffer, *golog.Logger) (IoBuffer, error)) *CallBackHandler {
 	return &CallBackHandler{Logger: logger, Handler: Handler}
 }
 
 //自动代理回执的消息处理接口
-func NewProxyCallBackHandler(logger *golog.Logger, Handler func(nbtcp.IoSession, nbtcp.IoBuffer, *golog.Logger) (nbtcp.IoBuffer, error)) *ProxyCallBackHandler {
+func NewProxyCallBackHandler(logger *golog.Logger, Handler func(IoSession, IoBuffer, *golog.Logger) (IoBuffer, error)) *ProxyCallBackHandler {
 	return &ProxyCallBackHandler{Logger: logger, Handler: Handler}
 }
 
 //安全的消息处理接口
-func NewSafeTransmitHandler(logger *golog.Logger, Handler func(nbtcp.IoSession, nbtcp.IoBuffer, *golog.Logger)) *SafeTransmitHandler {
+func NewSafeTransmitHandler(logger *golog.Logger, Handler func(IoSession, IoBuffer, *golog.Logger)) *SafeTransmitHandler {
 	return &SafeTransmitHandler{Logger: logger, Handler: Handler}
 }
 
 //非安全的消息处理接口，发生异常外部自行捕获
-func NewTransmitHandler(logger *golog.Logger, Handler func(nbtcp.IoSession, nbtcp.IoBuffer, *golog.Logger)) *TransmitHandler {
+func NewTransmitHandler(logger *golog.Logger, Handler func(IoSession, IoBuffer, *golog.Logger)) *TransmitHandler {
 	return &TransmitHandler{Logger: logger, Handler: Handler}
 }
 
 //客户端异步方式访问的消息处理端口通用类，有回执消息则会返回一个消息包
 type CallBackHandler struct {
-	Handler func(nbtcp.IoSession, nbtcp.IoBuffer, *golog.Logger) (nbtcp.IoBuffer, error)
+	Handler func(IoSession, IoBuffer, *golog.Logger) (IoBuffer, error)
 	Logger  *golog.Logger
 }
 
-func (h *CallBackHandler) transwork(iosession nbtcp.IoSession, in nbtcp.IoBuffer) (out nbtcp.IoBuffer, err error) {
+func (h *CallBackHandler) transwork(iosession IoSession, in IoBuffer) (out IoBuffer, err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			switch v := e.(type) {
@@ -57,8 +56,8 @@ func (h *CallBackHandler) transwork(iosession nbtcp.IoSession, in nbtcp.IoBuffer
 	return
 }
 
-//nbtcp.MsgHandler.Transmit()
-func (h *CallBackHandler) Transmit(iosession nbtcp.IoSession, in nbtcp.IoBuffer) {
+//MsgHandler.Transmit()
+func (h *CallBackHandler) Transmit(iosession IoSession, in IoBuffer) {
 	out, err := h.transwork(iosession, in)
 	if err != nil { //处理消息有错
 		panic(err)
@@ -69,17 +68,17 @@ func (h *CallBackHandler) Transmit(iosession nbtcp.IoSession, in nbtcp.IoBuffer)
 	}
 }
 
-func (h *CallBackHandler) send(iosession nbtcp.IoSession, out nbtcp.IoBuffer) {
+func (h *CallBackHandler) send(iosession IoSession, out IoBuffer) {
 	iosession.Write(out)
 }
 
 //客户端阻塞方式访问的消息处理端口通用类（AccessHandler），默认会读取消息号和回执端口号，不管处理后是否有回执消息，默认都会将消息号回执回去
 type ProxyCallBackHandler struct {
-	Handler func(nbtcp.IoSession, nbtcp.IoBuffer, *golog.Logger) (nbtcp.IoBuffer, error)
+	Handler func(IoSession, IoBuffer, *golog.Logger) (IoBuffer, error)
 	Logger  *golog.Logger
 }
 
-func (h *ProxyCallBackHandler) transwork(iosession nbtcp.IoSession, in nbtcp.IoBuffer) (out nbtcp.IoBuffer, err error) {
+func (h *ProxyCallBackHandler) transwork(iosession IoSession, in IoBuffer) (out IoBuffer, err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			switch v := e.(type) {
@@ -97,10 +96,10 @@ func (h *ProxyCallBackHandler) transwork(iosession nbtcp.IoSession, in nbtcp.IoB
 	return
 }
 
-//nbtcp.MsgHandler.Transmit()
-func (h *ProxyCallBackHandler) Transmit(iosession nbtcp.IoSession, in nbtcp.IoBuffer) {
+//MsgHandler.Transmit()
+func (h *ProxyCallBackHandler) Transmit(iosession IoSession, in IoBuffer) {
 	mid := in.ReadInt64()
-	rtport := in.ReadInt32()
+	rtport := MsgType(in.ReadInt32())
 	rqport := in.Port()
 	out, err := h.transwork(iosession, in)
 	if err != nil { //处理消息有错
@@ -120,24 +119,24 @@ func (h *ProxyCallBackHandler) Transmit(iosession nbtcp.IoSession, in nbtcp.IoBu
 	}
 }
 
-func (h *ProxyCallBackHandler) sendError(rqport int32, mid int64, rtport int32, iosession nbtcp.IoSession, gerr *gerror.SysError) {
+func (h *ProxyCallBackHandler) sendError(rqport MsgType, mid int64, rtport MsgType, iosession IoSession, gerr *gerror.SysError) {
 	bb := NewCapBuffer(rtport, 16+len(gerr.Content)+2)
 	bb.WriteInt64(mid)
-	bb.WriteInt32(rqport)
-	bb.WriteInt32(gerr.Code)
+	bb.WriteInt32(rqport.Value())
+	bb.WriteInt32(gerr.Code.Value())
 	bb.WriteString(gerr.Content)
 	iosession.Write(bb)
 }
 
-func (h *ProxyCallBackHandler) send(rqport int32, mid int64, rtport int32, iosession nbtcp.IoSession, out nbtcp.IoBuffer) {
+func (h *ProxyCallBackHandler) send(rqport MsgType, mid int64, rtport MsgType, iosession IoSession, out IoBuffer) {
 	wcap := 16
 	if out != nil {
 		wcap += out.Len()
 	}
 	bb := NewCapBuffer(rtport, wcap)
 	bb.WriteInt64(mid)
-	bb.WriteInt32(rqport)
-	bb.WriteInt32(gerror.OK)
+	bb.WriteInt32(rqport.Value())
+	bb.WriteInt32(gerror.OK.Value())
 	if out != nil {
 		bb.WriteBuffer(out)
 	}
@@ -146,12 +145,12 @@ func (h *ProxyCallBackHandler) send(rqport int32, mid int64, rtport int32, ioses
 
 //安全的消息处理器，捕获异常，不至于发生异常关闭连接，用于服务器之间不需要自动回执的消息处理（如果需要自动回执的使用ProxyCallBackHandler）
 type SafeTransmitHandler struct {
-	Handler func(nbtcp.IoSession, nbtcp.IoBuffer, *golog.Logger)
+	Handler func(IoSession, IoBuffer, *golog.Logger)
 	Logger  *golog.Logger
 }
 
-//nbtcp.MsgHandler.Transmit()
-func (h *SafeTransmitHandler) Transmit(iosession nbtcp.IoSession, in nbtcp.IoBuffer) {
+//MsgHandler.Transmit()
+func (h *SafeTransmitHandler) Transmit(iosession IoSession, in IoBuffer) {
 	defer func() {
 		if e := recover(); e != nil {
 			h.Logger.Warnf("Transmit error:%v", e)
@@ -163,11 +162,11 @@ func (h *SafeTransmitHandler) Transmit(iosession nbtcp.IoSession, in nbtcp.IoBuf
 
 //普通消息处理器，不捕获异常
 type TransmitHandler struct {
-	Handler func(nbtcp.IoSession, nbtcp.IoBuffer, *golog.Logger)
+	Handler func(IoSession, IoBuffer, *golog.Logger)
 	Logger  *golog.Logger
 }
 
-//nbtcp.MsgHandler.Transmit()
-func (h *TransmitHandler) Transmit(iosession nbtcp.IoSession, in nbtcp.IoBuffer) {
+//MsgHandler.Transmit()
+func (h *TransmitHandler) Transmit(iosession IoSession, in IoBuffer) {
 	h.Handler(iosession, in, h.Logger)
 }

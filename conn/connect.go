@@ -1,7 +1,7 @@
 // Copyright 2016 zxfonline@sina.com. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
-package nbtcp
+package conn
 
 import (
 	"io"
@@ -13,6 +13,7 @@ import (
 
 	"github.com/zxfonline/chanutil"
 	"github.com/zxfonline/golog"
+	. "github.com/zxfonline/net/packet"
 	"github.com/zxfonline/shutdown"
 	"github.com/zxfonline/taskexcutor"
 	"github.com/zxfonline/timefix"
@@ -21,6 +22,25 @@ import (
 var (
 	connLogger = golog.New("Connect")
 )
+
+//构建tcp连接
+func CreateConnect(wg *sync.WaitGroup, conn net.Conn, ChanReadSize, ChanSendSize, DeadlineSecond, ReadBufMaxSize uint) *Connect {
+	addr := conn.RemoteAddr().String()
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	c := new(Connect)
+	c.wg = wg
+	c.conn = conn
+	c.ip = net.ParseIP(host).String()
+	c.ChanReadSize = ChanReadSize
+	c.ChanSendSize = ChanSendSize
+	c.DeadlineSecond = DeadlineSecond
+	c.bufMaxSize = ReadBufMaxSize
+	connLogger.Debugf("CREATE %+v", c)
+	return c
+}
 
 //tcp连接消息处理类，收发的消息通过管道进行排序处理，适用于客户端到服务器之间的连接进行处理
 type Connect struct {
@@ -63,25 +83,6 @@ type Connect struct {
 	sender *sender
 	//连接绑定的的数据源
 	source interface{}
-}
-
-//构建tcp连接
-func CreateConnect(wg *sync.WaitGroup, conn net.Conn, ChanReadSize, ChanSendSize, DeadlineSecond, ReadBufMaxSize uint) *Connect {
-	addr := conn.RemoteAddr().String()
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		host = addr
-	}
-	c := new(Connect)
-	c.wg = wg
-	c.conn = conn
-	c.ip = net.ParseIP(host).String()
-	c.ChanReadSize = ChanReadSize
-	c.ChanSendSize = ChanSendSize
-	c.DeadlineSecond = DeadlineSecond
-	c.bufMaxSize = ReadBufMaxSize
-	connLogger.Debugf("CREATE %+v", c)
-	return c
 }
 
 //设置连接数据源

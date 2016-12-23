@@ -1,7 +1,7 @@
 // Copyright 2016 zxfonline@sina.com. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
-package nbtcp
+package transport
 
 import (
 	"errors"
@@ -10,12 +10,22 @@ import (
 	"github.com/zxfonline/gerror"
 	"github.com/zxfonline/golog"
 	"github.com/zxfonline/iptable"
+	. "github.com/zxfonline/net/packet"
 )
+
+//创建消息处理派发器
+func NewPortService(name string) *PortService {
+	return &PortService{
+		cache:  make(map[MsgType]MsgHandler),
+		forbid: make(map[MsgType]bool),
+		Logger: golog.New(name),
+	}
+}
 
 //消息处理派发器
 type PortService struct {
-	cache  map[int32]MsgHandler
-	forbid map[int32]bool
+	cache  map[MsgType]MsgHandler
+	forbid map[MsgType]bool
 	Logger *golog.Logger
 }
 
@@ -35,23 +45,14 @@ func (p *PortService) Transmit(session IoSession, data IoBuffer) {
 }
 
 //注册消息处理器 参数错误或者重复注册将触发panic
-func (p *PortService) RegistHandler(port int32, handler MsgHandler, forbid bool) {
+func (p *PortService) RegistHandler(port MsgType, handler MsgHandler, forbid bool) {
 	if handler == nil {
 		panic(errors.New("illegal handler error"))
 	}
 	if _, ok := p.cache[port]; ok {
-		panic(fmt.Errorf("repeat regist handler error,port=%d handler=%+v", port, handler))
+		panic(fmt.Errorf("repeat regist handler error,port=%d handler=%+v", port.Value(), handler))
 	}
 	p.cache[port] = handler
 	p.forbid[port] = forbid
-	p.Logger.Infof("Regist port=%d handler=%+v", port, handler)
-}
-
-//创建消息处理派发器
-func NewPortService(name string) *PortService {
-	return &PortService{
-		cache:  make(map[int32]MsgHandler),
-		forbid: make(map[int32]bool),
-		Logger: golog.New(name),
-	}
+	p.Logger.Infof("Regist port=%d handler=%+v", port.Value(), handler)
 }
