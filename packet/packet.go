@@ -8,7 +8,7 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 
-	"github.com/golang/protobuf/proto"
+	//	"github.com/golang/protobuf/proto"
 	"github.com/ugorji/go/codec"
 	"github.com/zxfonline/buffpool"
 )
@@ -29,38 +29,40 @@ var (
 )
 
 func init() {
+	////	InitSerialization(WriteProtoData, ReadProtoData)
+	//	InitSerialization(WriteGobData, ReadGobData)
 	InitSerialization(WriteMsgpData, ReadMsgpData)
 }
 
+////将 v 通过 "github.com/golang/protobuf/proto" 编码写入到buffer中 head:是否有消息体长度
+//var WriteProtoData = func(nb IoBuffer, v proto.Message, head bool) IoBuffer {
+//	if bb, err := proto.Marshal(v); err == nil {
+//		if head {
+//			nb.WriteDataWithHead(bb)
+//		} else {
+//			nb.WriteData(bb)
+//		}
+//	} else {
+//		panic(err)
+//	}
+//	return nb
+//}
+
+////读取一个data通过 "github.com/golang/protobuf/proto" 解码到v(a pointer proto.Message) head:是否有消息体长度
+//var ReadProtoData = func(nb IoBuffer, v proto.Message, head bool) IoBuffer {
+//	if head {
+//		if err := proto.Unmarshal(nb.ReadDataWithHead(), v); err != nil {
+//			panic(err)
+//		}
+//	} else {
+//		if err := proto.Unmarshal(nb.ReadData(), v); err != nil {
+//			panic(err)
+//		}
+//	}
+//	return nb
+//}
+
 var mh codec.MsgpackHandle
-
-//将 v 通过 "github.com/golang/protobuf/proto" 编码写入到buffer中 head:是否有消息体长度
-var WriteProtoData = func(nb IoBuffer, v proto.Message, head bool) IoBuffer {
-	if bb, err := proto.Marshal(v); err == nil {
-		if head {
-			nb.WriteDataWithHead(bb)
-		} else {
-			nb.WriteData(bb)
-		}
-	} else {
-		panic(err)
-	}
-	return nb
-}
-
-//读取一个data通过 "github.com/golang/protobuf/proto" 解码到v(a pointer proto.Message) head:是否有消息体长度
-var ReadProtoData = func(nb IoBuffer, v proto.Message, head bool) IoBuffer {
-	if head {
-		if err := proto.Unmarshal(nb.ReadDataWithHead(), v); err != nil {
-			panic(err)
-		}
-	} else {
-		if err := proto.Unmarshal(nb.ReadData(), v); err != nil {
-			panic(err)
-		}
-	}
-	return nb
-}
 
 //将 v 通过 "github.com/ugorji/go/codec" 编码写入到buffer中 head:是否有消息体长度
 var WriteMsgpData = func(nb IoBuffer, v interface{}, head bool) {
@@ -117,18 +119,18 @@ var ReadGobData = func(nb IoBuffer, v interface{}, head bool) {
 	}
 }
 
-//初始化默认序列化对象方式
+//主动调用该方法更改interface{}默认序列化"encoding/gob"方式
 func InitSerialization(serialization Serialization, deSerialization DeSerialization) {
 	Default_Serialization = serialization
 	Default_DeSerialization = deSerialization
 }
 
-func NewBuffer(port MsgType, buf []byte) IoBuffer {
+func NewBuffer(port PackApi, buf []byte) IoBuffer {
 	b := &nbuffer{port: port, buf: bytes.NewBuffer(buf), uuid: createUuid()}
 	return b
 }
 
-func NewCapBuffer(port MsgType, caps int) IoBuffer {
+func NewCapBuffer(port PackApi, caps int) IoBuffer {
 	buf := buffpool.BufGet(caps)
 	buf = buf[:0]
 	b := &nbuffer{port: port, buf: bytes.NewBuffer(buf), uuid: createUuid()}

@@ -35,10 +35,10 @@ const (
 var DataAccessHandler *AccessHandler
 
 //初始消息代理访问接口
-func InitDataAccessHandler(port MsgType, actimer *timer.Timer) {
+func InitDataAccessHandler(port PackApi, actimer *timer.Timer) {
 	DataAccessHandler = NewAccessHandler(port, actimer)
 }
-func NewAccessHandler(port MsgType, actimer *timer.Timer) *AccessHandler {
+func NewAccessHandler(port PackApi, actimer *timer.Timer) *AccessHandler {
 	if actimer == nil {
 		actimer = timer.GTimer()
 	}
@@ -50,7 +50,7 @@ func NewAccessHandler(port MsgType, actimer *timer.Timer) *AccessHandler {
 	//收到代理消息回包处理方法
 	h.Handler = func(session IoSession, data IoBuffer, logger *golog.Logger) {
 		mid := data.ReadInt64()
-		port := MsgType(data.ReadInt32())
+		port := PackApi(data.ReadInt32())
 		h.lock.RLock()
 		if e, ok := h.entryMap[mid]; ok {
 			h.lock.RUnlock()
@@ -98,7 +98,7 @@ func NewAccessHandler(port MsgType, actimer *timer.Timer) *AccessHandler {
 //代理消息阻塞访问处理器(接收端使用ProxyCallBackHandler子类来处理消息)
 type AccessHandler struct {
 	SafeTransmitHandler
-	port     MsgType
+	port     PackApi
 	lock     sync.RWMutex
 	actimer  *timer.Timer
 	entryMap map[int64]entry
@@ -151,7 +151,7 @@ func (h *AccessHandler) AsyncAccess(proxySession IoSession, data IoBuffer, callb
 	newAsyncEntry(proxySession, data.ConnectID(), h, callback).asyncAccess(data, timeout)
 }
 
-func (h *AccessHandler) Port() MsgType {
+func (h *AccessHandler) Port() PackApi {
 	return h.port
 }
 
@@ -275,7 +275,7 @@ func (e *entry) asyncAccess(data IoBuffer, timeout time.Duration) {
 	//添加超时事件
 	e.event = h.actimer.AddOnceEvent(taskexcutor.NewTaskService(func(params ...interface{}) {
 		e := (params[1]).(*entry)
-		port := (params[2]).(MsgType)
+		port := (params[2]).(PackApi)
 		h := e.h
 		if h == nil {
 			return

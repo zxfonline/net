@@ -104,12 +104,12 @@ type IoBuffer interface {
 	//连接id
 	SetConnectID(int64)
 	//消息包发送类型
-	Port() MsgType
+	Port() PackApi
 	//消息包复用，一般处理完消息后直接复用该消息包，更改消息传输类型并填充数据回执给请求方
-	SetPort(MsgType)
+	SetPort(PackApi)
 	//消息包接收类型，初次创建消息包传入的数据包类型
-	RcvPort() MsgType
-	SetRcvPort(MsgType)
+	RcvPort() PackApi
+	SetRcvPort(PackApi)
 	//消息唯一id
 	Uuid() int64
 	SetUuid(int64)
@@ -139,6 +139,7 @@ type IoBuffer interface {
 	//读取所有剩余字节数据
 	ReadData() []byte
 
+	ReadLength() int
 	ReadInt8() int8
 	ReadUint8() uint8
 	ReadInt16() int16
@@ -153,6 +154,7 @@ type IoBuffer interface {
 	ReadFloat32() float32
 	ReadFloat64() float64
 
+	WriteLength(int)
 	WriteInt8(int8)
 	WriteUint8(uint8)
 	WriteInt16(int16)
@@ -166,9 +168,9 @@ type IoBuffer interface {
 	WriteByte(byte)
 	WriteFloat32(float32)
 	WriteFloat64(float64)
-	//将 v 编码写入到buffer中 head:是否有消息体长度 (默认使用"github.com/ugorji/go/codec") 查看 zxfonline/net/packet.go
+	//将 v 编码写入到buffer中 head:是否有消息体长度 (eg:"encoding/gob","github.com/golang/protobuf/proto","http://msgpack.org/") 查看 zxfonline/net/packet.go
 	WriteBinaryData(v interface{}, head bool)
-	//读取一个data解码到v(a pointer interface{}) head:是否有消息体长度(默认使用"github.com/ugorji/go/codec") 查看 zxfonline/net/packet.go
+	//读取一个data解码到v(a pointer interface{}) head:是否有消息体长度 (eg:"encoding/gob","github.com/golang/protobuf/proto","http://msgpack.org/")  查看 zxfonline/net/packet.go
 	ReadBinaryData(v interface{}, head bool)
 
 	String() string

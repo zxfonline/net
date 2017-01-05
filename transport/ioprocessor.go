@@ -69,7 +69,7 @@ func (rw *msgRWIO) ReadMsg() (data IoBuffer) {
 			panic(err)
 		}
 	}
-	port := MsgType(t)
+	port := PackApi(t)
 	data = NewBuffer(port, m)
 	data.SetRcvPort(port)
 	data.SetRcvt(timefix.MillisTime())

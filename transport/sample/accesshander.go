@@ -54,7 +54,7 @@ func main2() {
 			wg.Add(tt)
 			//		go func(i int) {
 			for j := 0; j < tt; j++ {
-				proxyBf := NewCapBuffer(MsgType(i), 4)
+				proxyBf := NewCapBuffer(PackApi(i), 4)
 				proxyBf.WriteInt32(int32(j))
 				DataAccessHandler.AsyncAccess(proxyBf, taskexcutor.NewTaskService(func(params ...interface{}) {
 					i := (params[0]).(int)
@@ -89,7 +89,7 @@ func main2() {
 			wg.Add(1)
 			go func(i int) {
 				for j := 0; j < tt; j++ {
-					proxyBf := NewCapBuffer(MsgType(i), 4)
+					proxyBf := NewCapBuffer(PackApi(i), 4)
 					proxyBf.WriteInt32(int32(j))
 					DataAccessHandler.SyncAccess(proxyBf, 15*time.Second)
 				}
@@ -103,7 +103,7 @@ func main2() {
 	logger.Println("over")
 }
 
-func NewAccessHandler(port MsgType, actimer *timer.Timer) *AccessHandler {
+func NewAccessHandler(port PackApi, actimer *timer.Timer) *AccessHandler {
 	if actimer == nil {
 		actimer = timer.GTimer()
 	}
@@ -115,7 +115,7 @@ func NewAccessHandler(port MsgType, actimer *timer.Timer) *AccessHandler {
 }
 
 type AccessHandler struct {
-	port     MsgType
+	port     PackApi
 	lock     sync.RWMutex
 	actimer  *timer.Timer
 	entryMap map[int64]entry
@@ -123,7 +123,7 @@ type AccessHandler struct {
 
 func (h *AccessHandler) Transmit(data IoBuffer) {
 	mid := data.ReadInt64()
-	rqport := MsgType(data.ReadInt32())
+	rqport := PackApi(data.ReadInt32())
 	pb := NewBuffer(rqport, data.Bytes())
 	h.lock.RLock()
 	if e, ok := h.entryMap[mid]; ok {
@@ -169,7 +169,7 @@ func (h *AccessHandler) AsyncAccess(data IoBuffer, callback *taskexcutor.TaskSer
 	newAsyncEntry(data.ConnectID(), h, callback).asyncAccess(data, timeout)
 }
 
-func (h *AccessHandler) Port() MsgType {
+func (h *AccessHandler) Port() PackApi {
 	return h.port
 }
 
@@ -239,7 +239,7 @@ func (e *entry) syncAccess(data IoBuffer, timeout time.Duration) (bb IoBuffer, e
 	go func(in IoBuffer) {
 		//模仿网络通信,接收端收到消息
 		mid := in.ReadInt64()
-		rtport := MsgType(in.ReadInt32())
+		rtport := PackApi(in.ReadInt32())
 		//		sl := randInt(0.5e3, 2e3)
 		//		fmt.Printf("receive data=%d,sleep=%+v\n", mid, sl)
 		//		time.Sleep(time.Duration(sl) * time.Millisecond)
@@ -311,7 +311,7 @@ func (e *entry) asyncAccess(data IoBuffer, timeout time.Duration) {
 	go func(in IoBuffer) {
 		//模仿网络通信,接收端收到消息
 		mid := in.ReadInt64()
-		rtport := MsgType(in.ReadInt32())
+		rtport := PackApi(in.ReadInt32())
 
 		sl := randInt(0.5e3, 2e3)
 		//		fmt.Printf("receive data=%d,sleep=%+v\n", mid, sl)

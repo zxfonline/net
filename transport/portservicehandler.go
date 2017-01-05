@@ -99,7 +99,7 @@ func (h *ProxyCallBackHandler) transwork(iosession IoSession, in IoBuffer) (out 
 //MsgHandler.Transmit()
 func (h *ProxyCallBackHandler) Transmit(iosession IoSession, in IoBuffer) {
 	mid := in.ReadInt64()
-	rtport := MsgType(in.ReadInt32())
+	rtport := PackApi(in.ReadInt32())
 	rqport := in.Port()
 	out, err := h.transwork(iosession, in)
 	if err != nil { //处理消息有错
@@ -119,7 +119,7 @@ func (h *ProxyCallBackHandler) Transmit(iosession IoSession, in IoBuffer) {
 	}
 }
 
-func (h *ProxyCallBackHandler) sendError(rqport MsgType, mid int64, rtport MsgType, iosession IoSession, gerr *gerror.SysError) {
+func (h *ProxyCallBackHandler) sendError(rqport PackApi, mid int64, rtport PackApi, iosession IoSession, gerr *gerror.SysError) {
 	bb := NewCapBuffer(rtport, 16+len(gerr.Content)+2)
 	bb.WriteInt64(mid)
 	bb.WriteInt32(rqport.Value())
@@ -128,7 +128,7 @@ func (h *ProxyCallBackHandler) sendError(rqport MsgType, mid int64, rtport MsgTy
 	iosession.Write(bb)
 }
 
-func (h *ProxyCallBackHandler) send(rqport MsgType, mid int64, rtport MsgType, iosession IoSession, out IoBuffer) {
+func (h *ProxyCallBackHandler) send(rqport PackApi, mid int64, rtport PackApi, iosession IoSession, out IoBuffer) {
 	wcap := 16
 	if out != nil {
 		wcap += out.Len()

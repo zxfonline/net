@@ -28,8 +28,8 @@ func createUuid() int64 {
 }
 
 type nbuffer struct {
-	port      MsgType
-	rcvPort   MsgType
+	port      PackApi
+	rcvPort   PackApi
 	connectId int64
 	buf       *bytes.Buffer
 	cache     bool
@@ -88,18 +88,18 @@ func (nb *nbuffer) Cache(cache bool) IoBuffer {
 	return nb
 }
 
-func (nb *nbuffer) Port() MsgType {
+func (nb *nbuffer) Port() PackApi {
 	return nb.port
 }
 
 //消息包复用，一般处理完消息后直接复用该消息包，更改消息传输类型并填充数据回执给请求方
-func (nb *nbuffer) SetPort(port MsgType) {
+func (nb *nbuffer) SetPort(port PackApi) {
 	nb.port = port
 }
-func (nb *nbuffer) RcvPort() MsgType {
+func (nb *nbuffer) RcvPort() PackApi {
 	return nb.rcvPort
 }
-func (nb *nbuffer) SetRcvPort(rcvPort MsgType) {
+func (nb *nbuffer) SetRcvPort(rcvPort PackApi) {
 	nb.rcvPort = rcvPort
 }
 
@@ -118,7 +118,7 @@ func (nb *nbuffer) WriteBuffer(io IoBuffer) {
 
 //写入字节数组，包含了长度头
 func (nb *nbuffer) WriteDataWithHead(bb []byte) {
-	nb.writeLength(len(bb))
+	nb.WriteLength(len(bb))
 	nb.WriteData(bb)
 }
 
@@ -140,7 +140,7 @@ func (nb *nbuffer) ReadData() []byte {
 	return bb
 }
 func (nb *nbuffer) ReadDataWithHead() []byte {
-	n := nb.readLength()
+	n := nb.ReadLength()
 	bb := buffpool.BufGet(n)
 	if n == 0 {
 		return bb
@@ -214,7 +214,7 @@ func (nb *nbuffer) ReadUint64() (n uint64) {
 	return
 }
 func (nb *nbuffer) ReadString() string {
-	n := nb.readLength()
+	n := nb.ReadLength()
 	if n == 0 {
 		return ""
 	}
@@ -228,11 +228,11 @@ func (nb *nbuffer) ReadString() string {
 }
 func (nb *nbuffer) WriteString(str string) {
 	if str == "" {
-		nb.writeLength(0)
+		nb.WriteLength(0)
 		return
 	}
 	bb := []byte(str)
-	nb.writeLength(len(bb))
+	nb.WriteLength(len(bb))
 	err := binary.Write(nb.buf, DefaultEndian, bb)
 	if err != nil {
 		panic(err)
@@ -240,10 +240,10 @@ func (nb *nbuffer) WriteString(str string) {
 }
 func (nb *nbuffer) ReadBool() bool {
 	n := nb.ReadInt8()
-	if n == 1 {
-		return true
-	} else {
+	if n == 0 {
 		return false
+	} else {
+		return true
 	}
 }
 func (nb *nbuffer) ReadByte() byte {
@@ -311,7 +311,7 @@ func (nb *nbuffer) WriteUint64(n uint64) {
 	}
 }
 
-func (nb *nbuffer) writeLength(n int) {
+func (nb *nbuffer) WriteLength(n int) {
 	if n >= 0x20000000 || n < 0 {
 		panic(fmt.Errorf("writeLength, invalid len:%d", n))
 	}
@@ -323,7 +323,7 @@ func (nb *nbuffer) writeLength(n int) {
 		nb.WriteInt32(int32(n + 0x20000000))
 	}
 }
-func (nb *nbuffer) readLength() int {
+func (nb *nbuffer) ReadLength() int {
 	b := nb.ReadByte()
 	n := int(b) & 0xff
 	if n >= 0x80 {

@@ -7,12 +7,12 @@ import (
 	"strconv"
 )
 
-type MsgType int32
+type PackApi int32
 
-func (x MsgType) String() string {
-	return EnumName(MsgType_name, int32(x))
+func (x PackApi) String() string {
+	return EnumName(PackApi_name, int32(x))
 }
-func (x MsgType) Value() int32 {
+func (x PackApi) Value() int32 {
 	return int32(x)
 }
 
@@ -25,7 +25,7 @@ func EnumName(m map[int32]string, v int32) string {
 	return strconv.Itoa(int(v))
 }
 
-var MsgType_name = map[int32]string{
+var PackApi_name = map[int32]string{
 	1: "REQ_TIME_PORT",
 	2: "ACK_TIME_PORT",
 	3: "ACCESS_RETURN_PORT",
@@ -34,9 +34,9 @@ var MsgType_name = map[int32]string{
 //系统消息代理器类型常量
 const (
 	//时间请求端口
-	REQ_TIME_PORT MsgType = 1
+	REQ_TIME_PORT PackApi = 1
 	//时间响应端口
-	ACK_TIME_PORT MsgType = 2
+	ACK_TIME_PORT PackApi = 2
 	//消息访问返回端口
-	ACCESS_RETURN_PORT MsgType = 3
+	ACCESS_RETURN_PORT PackApi = 3
 )

@@ -16,16 +16,16 @@ import (
 //创建消息处理派发器
 func NewPortService(name string) *PortService {
 	return &PortService{
-		cache:  make(map[MsgType]MsgHandler),
-		forbid: make(map[MsgType]bool),
+		cache:  make(map[PackApi]MsgHandler),
+		forbid: make(map[PackApi]bool),
 		Logger: golog.New(name),
 	}
 }
 
 //消息处理派发器
 type PortService struct {
-	cache  map[MsgType]MsgHandler
-	forbid map[MsgType]bool
+	cache  map[PackApi]MsgHandler
+	forbid map[PackApi]bool
 	Logger *golog.Logger
 }
 
@@ -45,7 +45,7 @@ func (p *PortService) Transmit(session IoSession, data IoBuffer) {
 }
 
 //注册消息处理器 参数错误或者重复注册将触发panic
-func (p *PortService) RegistHandler(port MsgType, handler MsgHandler, forbid bool) {
+func (p *PortService) RegistHandler(port PackApi, handler MsgHandler, forbid bool) {
 	if handler == nil {
 		panic(errors.New("illegal handler error"))
 	}
