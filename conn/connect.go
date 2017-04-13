@@ -1,6 +1,7 @@
 // Copyright 2016 zxfonline@sina.com. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
+
 package conn
 
 import (
@@ -72,12 +73,14 @@ type Connect struct {
 	stopD    chanutil.DoneChan
 	quitF    context.CancelFunc
 
-	//收到消息是否阻塞
+	//收到消息是否阻塞，判断是否正在执行消息事件
 	runstate chan bool
-	runlock  sync.Mutex
+	//消息队列执行是否等待
+	waitChan bool
 	//消息收取缓冲管道
-	readChan chan IoBuffer
-	service  *taskexcutor.TaskService
+	readChan       chan IoBuffer
+	service        *taskexcutor.TaskService
+	serviceExcutor taskexcutor.Excutor
 
 	//消息发送器
 	sender *sender
@@ -112,13 +115,41 @@ func (c *Connect) transfer(out interface{}) {
 	}
 }
 
+//消息处理事件中，wait=true 消息需要异步回调执行完成后再继续连接中后续的消息,wait=false 回调完成后需要关闭等待,否则该连接不再继续处理消息
+func (c *Connect) QueueProcessWait(wait bool) {
+	if wait && (!c.waitChan) {
+		c.waitChan = true
+	} else if (!wait) && c.waitChan {
+		c.waitChan = false
+		if len(c.readChan) > 0 {
+			if c.serviceExcutor != nil {
+				err := c.serviceExcutor.Excute(c.service)
+				if err != nil {
+					select {
+					case <-c.runstate:
+					default:
+					}
+				}
+			}
+		} else {
+			select {
+			case <-c.runstate:
+			default:
+			}
+		}
+	}
+}
+
 //socket消息处理统一方法，由线程池调用,其他地方请勿调用
 func (c *Connect) processingQueue(params ...interface{}) {
 	defer c.recoverClose()
 	defer func() {
-		c.runlock.Lock()
-		<-c.runstate
-		c.runlock.Unlock()
+		if !c.waitChan {
+			select {
+			case <-c.runstate:
+			default:
+			}
+		}
 	}()
 	for q := false; !q; {
 		select {
@@ -143,6 +174,9 @@ func (c *Connect) processingQueue(params ...interface{}) {
 					data.SetPrct(timefix.MillisTime())
 					c.filter.MessageReceived(c, data)
 					c.transH.Transmit(c, data)
+					if c.waitChan { //需要异步回调后处理后续消息
+						q = true
+					}
 				}()
 			default:
 				q = true
@@ -208,6 +242,7 @@ func (c *Connect) Open(parent context.Context, msgExcutor taskexcutor.Excutor, c
 		c.stopD = chanutil.NewDoneChan()
 		c.cid = cid
 		c.rw = ioc(c.conn, c)
+		c.serviceExcutor = msgExcutor
 		c.sender = newsender(c)
 		go c.sender.Start()
 		c.transH = msgProcessor
@@ -275,16 +310,13 @@ func (c *Connect) receivingQueue(ctx context.Context, msgExcutor taskexcutor.Exc
 			data.SetConnectID(c.cid)
 			data.TracePrintf("wait process msg from %v", c.RemoteAddr())
 			c.readChan <- data
-			c.runlock.Lock()
 			select {
 			case c.runstate <- true:
-				c.runlock.Unlock()
 				err := msgExcutor.Excute(c.service)
 				if err != nil {
 					panic(err)
 				}
 			default:
-				c.runlock.Unlock()
 			}
 		}
 	}
@@ -354,6 +386,7 @@ func (c *Connect) Close() {
 		}
 		defer func() {
 			connLogger.Debugf("STOPED %+v", c)
+			c.serviceExcutor = nil
 			c.wg.Done()
 		}()
 		defer c.recoverLog()

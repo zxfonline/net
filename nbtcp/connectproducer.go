@@ -1,6 +1,7 @@
 // Copyright 2016 zxfonline@sina.com. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
+
 package nbtcp
 
 import (
@@ -24,7 +25,6 @@ type TcpConnectProducer struct {
 
 	event     *timer.TimerEvent
 	iosession IoSession
-	mu        sync.Mutex
 	openning  int32
 	trigger   *taskexcutor.TaskService
 	Logger    *golog.Logger
@@ -52,13 +52,9 @@ func (p *TcpConnectProducer) Ontime(params ...interface{}) {
 	if p.Closed() {
 		return
 	}
-	p.mu.Lock()
-	if atomic.LoadInt32(&p.openning) == 1 { //当前正在建立连接中
-		p.mu.Unlock()
+	if !atomic.CompareAndSwapInt32(&p.openning, 0, 1) { //当前正在建立连接中
 		return
 	}
-	atomic.StoreInt32(&p.openning, 1)
-	p.mu.Unlock()
 	defer atomic.StoreInt32(&p.openning, 0)
 	nio := p.clientFactory.GetConnect(p.address)
 	if nio != nil {

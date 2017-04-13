@@ -1,6 +1,7 @@
 // Copyright 2016 zxfonline@sina.com. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
+
 package transport
 
 import (
@@ -64,7 +65,7 @@ func NewAccessHandler(port PackApi, actimer *timer.Timer) *AccessHandler {
 				default:
 				}
 				data.TracePrintf("sync proxy callback post ok, port:%d, mid:%d", port, mid)
-			} else if mid < 0 {
+			} else if mid < 0 { //异步消息回复
 				h.lock.Lock()
 				delete(h.entryMap, mid)
 				h.lock.Unlock()
@@ -78,18 +79,19 @@ func NewAccessHandler(port PackApi, actimer *timer.Timer) *AccessHandler {
 				_, err = e.parseData(data)
 				if e.event != nil {
 					e.event.Close()
+					e.event = nil
 				}
 				defer e.clear()
 				e.callback.AddArgs(-1, data, err)
 				e.callback.Call(h.actimer.Logger)
 			}
 		} else {
+			h.lock.RUnlock()
 			if mid > 0 {
 				data.TraceErrorf("sync proxy callback timeout, port:%d, mid:%d", port, mid)
 			} else {
 				data.TraceErrorf("async proxy callback timeout, port:%d, mid:%d", port, mid)
 			}
-			h.lock.RUnlock()
 		}
 	}
 	return h
@@ -175,10 +177,13 @@ type entry struct {
 	//唯一消息号(正数表示同步请求消息号，负数表示异步请求消息号)
 	mid int64
 	//消息所有者
-	session  IoSession
-	connId   int64
-	h        *AccessHandler
-	waitChan chan IoBuffer
+	session IoSession
+	connId  int64
+	h       *AccessHandler
+
+	waitChan  chan IoBuffer
+	blockChan *time.Timer
+
 	callback *taskexcutor.TaskService
 	event    *timer.TimerEvent
 }
@@ -206,10 +211,20 @@ func (e *entry) clear() {
 	e.h = nil
 	e.session = nil
 	if e.callback != nil {
+		e.callback.Cancel = true
 		e.callback = nil
 	}
+	if e.event != nil {
+		e.event.Close()
+		e.event = nil
+	}
+
 	if e.waitChan != nil {
 		close(e.waitChan)
+	}
+	if e.blockChan != nil {
+		e.blockChan.Stop()
+		e.blockChan = nil
 	}
 }
 
@@ -225,16 +240,15 @@ func (e *entry) syncAccess(data IoBuffer, timeout time.Duration) (bb IoBuffer, e
 	h.lock.Unlock()
 	data.TracePrintf("sync proxy, port:%d, mid:%d", data.Port(), e.mid)
 	e.session.Write(out)
-	defer func() {
+	data.Reset()
+	bb = data
+	e.blockChan = time.NewTimer(timeout)
+	defer e.clear()
+	select {
+	case bb = <-e.waitChan:
 		h.lock.Lock()
 		delete(h.entryMap, e.mid)
 		h.lock.Unlock()
-		e.clear()
-	}()
-	data.Reset()
-	bb = data
-	select {
-	case bb = <-e.waitChan:
 		bb.SetConnectID(e.connId)
 		bb, err = e.parseData(bb)
 		if bb != nil {
@@ -243,7 +257,11 @@ func (e *entry) syncAccess(data IoBuffer, timeout time.Duration) (bb IoBuffer, e
 		} else {
 			data.TracePrintf("sync proxy callback ok,err:%v", err)
 		}
-	case <-time.After(timeout):
+	case <-e.blockChan.C:
+		h.lock.Lock()
+		delete(h.entryMap, e.mid)
+		h.lock.Unlock()
+		e.blockChan = nil
 		if e.session.Closed() {
 			err = ACCESS_IO_ERROR
 		} else {

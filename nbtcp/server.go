@@ -1,6 +1,7 @@
 // Copyright 2016 zxfonline@sina.com. All rights reserved.
 // Use of s source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
+
 package nbtcp
 
 import (
