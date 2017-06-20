@@ -33,7 +33,7 @@ type PortService struct {
 //处理消息通过消息类型进行派发
 func (p *PortService) Transmit(session IoSession, data IoBuffer) {
 	if h, ok := p.cache[data.Port()]; ok {
-		if _, exist := p.forbid[data.Port()]; exist {
+		if forbided := p.forbid[data.Port()]; forbided {
 			if !iptable.IsTrustedIP(session.RemoteIP(), true) {
 				panic(gerror.NewError(gerror.SERVER_CDATA_ERROR, fmt.Sprintf("transmit forbid handler,ip:%s,port:%d", session.RemoteIP(), data.Port())))
 				return

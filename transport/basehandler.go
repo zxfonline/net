@@ -25,7 +25,7 @@ func NewTimeReqHandler(msgtype PackApi) *SafeTransmitHandler {
 		//发送本地纠正的时间 毫秒
 		in.Reset()
 		in.SetPort(ACK_TIME_PORT)
-		in.WriteInt64(timefix.MillisUTCTime())
+		in.WriteInt64(timefix.NanosTime())
 		connect.Write(in)
 	})
 }
