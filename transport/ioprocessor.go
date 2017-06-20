@@ -73,7 +73,7 @@ func (rw *msgRWIO) ReadMsg() (data IoBuffer) {
 	port := PackApi(t)
 	data = NewBuffer(port, m)
 	data.SetRcvPort(port)
-	data.SetRcvt(timefix.MillisTime())
+	data.SetRcvt(timefix.NanosTime())
 	if EnableTracing {
 		data.RegistTraceInfo(trace.New(fmt.Sprintf("%s.port_%d", rw.familyhead, t), "buffer"))
 	}
@@ -82,7 +82,7 @@ func (rw *msgRWIO) ReadMsg() (data IoBuffer) {
 
 //MsgWriter.WriteMsg() len[4]=port[4]+body[n]
 func (rw *msgRWIO) WriteMsg(data IoBuffer) {
-	data.SetPost(timefix.MillisTime())
+	data.SetPost(timefix.NanosTime())
 	m := data.Bytes()
 	t := data.Port()
 	l := len(m)

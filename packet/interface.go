@@ -88,17 +88,17 @@ type IoBuffer interface {
 	io.WriterTo
 	io.Reader
 	io.Writer
-	//收到消息的时间
+	//收到消息的时间 ns
 	GetRcvt() int64
-	//收到消息的时间
+	//收到消息的时间 ns
 	SetRcvt(int64)
-	//开始处理时间
+	//开始处理时间 ns
 	GetPrct() int64
-	//开始处理时间
+	//开始处理时间 ns
 	SetPrct(int64)
-	//消息处理完成/发送时间
+	//消息处理完成/发送时间 ns
 	GetPost() int64
-	//消息处理完成/发送时间
+	//消息处理完成/发送时间 ns
 	SetPost(int64)
 	//消息归属的连接id
 	ConnectID() int64

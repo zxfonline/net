@@ -13,7 +13,7 @@ import (
 //服务器时间响应接口
 func NewTimeAckHandler(msgtype PackApi) *SafeTransmitHandler {
 	return NewSafeTransmitHandler(golog.New(msgtype.String()), func(connect IoSession, in IoBuffer, logger *golog.Logger) {
-		//获取到远程服务器时间 毫秒
+		//获取到远程服务器时间 纳秒
 		remote_time := in.ReadInt64()
 		timefix.ResetTime(remote_time)
 	})

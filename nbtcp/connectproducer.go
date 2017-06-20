@@ -6,7 +6,6 @@ package nbtcp
 
 import (
 	"net"
-	"sync"
 	"sync/atomic"
 	"time"
 

@@ -171,7 +171,7 @@ func (c *Connect) processingQueue(params ...interface{}) {
 						}
 					}()
 					data.TracePrintf("start process")
-					data.SetPrct(timefix.MillisTime())
+					data.SetPrct(timefix.NanosTime())
 					c.filter.MessageReceived(c, data)
 					c.transH.Transmit(c, data)
 					if c.waitChan { //需要异步回调后处理后续消息
@@ -204,7 +204,7 @@ func (c *Connect) processingMutil(params ...interface{}) {
 			}
 		}()
 		data.TracePrintf("start process")
-		data.SetPrct(timefix.MillisTime())
+		data.SetPrct(timefix.NanosTime())
 		c.filter.MessageReceived(c, data)
 		c.transH.Transmit(c, data)
 	}

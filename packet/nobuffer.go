@@ -34,9 +34,9 @@ type nbuffer struct {
 	connectId int64
 	buf       *bytes.Buffer
 	cache     bool
-	rcvt      int64 //收到消息的时间
-	prct      int64 //开始处理时间
-	post      int64 //消息处理完成/发送时间
+	rcvt      int64 //收到消息的时间 ns
+	prct      int64 //开始处理时间 ns
+	post      int64 //消息处理完成/发送时间 ns
 	tr        trace.Trace
 	uuid      int64 //消息唯一id
 }
@@ -446,7 +446,7 @@ func (nb *nbuffer) ReadBinaryData(v interface{}, head bool) {
 func (nb *nbuffer) String() string {
 	post := nb.GetPost()
 	if post == 0 {
-		post = timefix.MillisTime()
+		post = timefix.NanosTime()
 	}
 	prct := nb.GetPrct()
 	rcvt := nb.GetRcvt()
