@@ -51,13 +51,15 @@ func (r *DefaultIoFilterChain) SessionOpened(session IoSession) {
 //初始化加密
 func (r *DefaultIoFilterChain) InitEncrypt(token int64, callback func(IoBuffer)) {}
 
-//step3: IoFilterChain.MessageReceived() 进行消息包解码、解压、解包等详细处理
-func (r *DefaultIoFilterChain) MessageReceived(session IoSession, data IoBuffer) {
+//step3: IoFilterChain.MessageReceived() 进行消息包解码、解压、解包等详细处理,返回成功才继续处理该条消息
+func (r *DefaultIoFilterChain) MessageReceived(session IoSession, data IoBuffer) bool {
+	return true
 }
 
-//step4: IoFilterChain.MessageSend() 进行消息包编码、压缩、封装等详细处理
-func (r *DefaultIoFilterChain) MessageSend(session IoSession, data IoBuffer) {
+//step4: IoFilterChain.MessageSend() 进行消息包编码、压缩、封装等详细处理,返回成功才继续处理该条消息
+func (r *DefaultIoFilterChain) MessageSend(session IoSession, data IoBuffer) bool {
 	data.Cache(true)
+	return true
 }
 
 //step5: IoFilterChain.SessionClosed() 连接关闭后续处理

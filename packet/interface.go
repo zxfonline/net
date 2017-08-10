@@ -48,10 +48,10 @@ type IoFilterChain interface {
 	SessionOpened(IoSession)
 	//初始化加密
 	InitEncrypt(int64, func(IoBuffer))
-	//进行消息包解码、解压、解包等详细处理(调用者自行捕获错误)
-	MessageReceived(IoSession, IoBuffer)
-	//进行消息包编码、压缩、封装等详细处理(调用者自行捕获错误)
-	MessageSend(IoSession, IoBuffer)
+	//进行消息包解码、解压、解包等详细处理(调用者自行捕获错误),返回成功才继续处理该条消息
+	MessageReceived(IoSession, IoBuffer) bool
+	//进行消息包编码、压缩、封装等详细处理(调用者自行捕获错误),返回成功才继续处理该条消息
+	MessageSend(IoSession, IoBuffer) bool
 	//会话关闭
 	SessionClosed(IoSession)
 }

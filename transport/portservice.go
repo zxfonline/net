@@ -8,26 +8,30 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/zxfonline/expvar"
 	"github.com/zxfonline/gerror"
 	"github.com/zxfonline/golog"
 	"github.com/zxfonline/iptable"
 	. "github.com/zxfonline/net/packet"
+	"github.com/zxfonline/trace"
 )
 
 //创建消息处理派发器
 func NewPortService(name string) *PortService {
 	return &PortService{
-		cache:  make(map[PackApi]MsgHandler),
-		forbid: make(map[PackApi]bool),
-		Logger: golog.New(name),
+		cache:   make(map[PackApi]MsgHandler),
+		forbid:  make(map[PackApi]bool),
+		Logger:  golog.New(name),
+		counter: expvar.NewMap(name),
 	}
 }
 
 //消息处理派发器
 type PortService struct {
-	cache  map[PackApi]MsgHandler
-	forbid map[PackApi]bool
-	Logger *golog.Logger
+	cache   map[PackApi]MsgHandler
+	forbid  map[PackApi]bool
+	Logger  *golog.Logger
+	counter *expvar.Map
 }
 
 //处理消息通过消息类型进行派发
@@ -38,6 +42,9 @@ func (p *PortService) Transmit(session IoSession, data IoBuffer) {
 				panic(gerror.NewError(gerror.SERVER_CDATA_ERROR, fmt.Sprintf("transmit forbid handler,ip:%s,port:%d", session.RemoteIP(), data.Port())))
 				return
 			}
+		}
+		if trace.EnableTracing {
+			p.counter.Add(data.Port().String(), 1)
 		}
 		h.Transmit(session, data)
 		return

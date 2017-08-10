@@ -107,8 +107,9 @@ func (c *Connect) transfer(out interface{}) {
 	default:
 		switch v := out.(type) {
 		case IoBuffer:
-			c.filter.MessageSend(c, v)
-			c.rw.WriteMsg(v)
+			if c.filter.MessageSend(c, v) {
+				c.rw.WriteMsg(v)
+			}
 		default: //非IoBuffer 表示关闭连接
 			c.Close()
 		}
@@ -172,8 +173,9 @@ func (c *Connect) processingQueue(params ...interface{}) {
 					}()
 					data.TracePrintf("start process")
 					data.SetPrct(timefix.NanosTime())
-					c.filter.MessageReceived(c, data)
-					c.transH.Transmit(c, data)
+					if c.filter.MessageReceived(c, data) {
+						c.transH.Transmit(c, data)
+					}
 					if c.waitChan { //需要异步回调后处理后续消息
 						q = true
 					}
@@ -205,8 +207,9 @@ func (c *Connect) processingMutil(params ...interface{}) {
 		}()
 		data.TracePrintf("start process")
 		data.SetPrct(timefix.NanosTime())
-		c.filter.MessageReceived(c, data)
-		c.transH.Transmit(c, data)
+		if c.filter.MessageReceived(c, data) {
+			c.transH.Transmit(c, data)
+		}
 	}
 }
 
