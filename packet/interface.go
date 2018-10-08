@@ -8,7 +8,7 @@ import (
 	"io"
 	"net"
 
-	"golang.org/x/net/trace"
+	trace "github.com/zxfonline/golangtrace"
 )
 
 //连接提供器

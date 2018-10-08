@@ -15,11 +15,11 @@ import (
 	. "github.com/zxfonline/net/packet"
 
 	"github.com/zxfonline/gerror"
+	trace "github.com/zxfonline/golangtrace"
 	"github.com/zxfonline/golog"
 	"github.com/zxfonline/taskexcutor"
 	"github.com/zxfonline/timer"
 	. "github.com/zxfonline/trace"
-	"golang.org/x/net/trace"
 )
 
 var (

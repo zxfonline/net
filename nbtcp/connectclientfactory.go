@@ -14,10 +14,10 @@ import (
 	"context"
 
 	"github.com/zxfonline/chanutil"
+	trace "github.com/zxfonline/golangtrace"
 	. "github.com/zxfonline/net/packet"
 	"github.com/zxfonline/taskexcutor"
 	. "github.com/zxfonline/trace"
-	"golang.org/x/net/trace"
 )
 
 //客户端连接工厂,提供创建连接并维护建立的连接

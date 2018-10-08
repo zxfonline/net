@@ -14,18 +14,18 @@ import (
 	"context"
 
 	"github.com/zxfonline/chanutil"
+	trace "github.com/zxfonline/golangtrace"
 	"github.com/zxfonline/golog"
 	. "github.com/zxfonline/net/conn"
 	. "github.com/zxfonline/net/packet"
 	"github.com/zxfonline/taskexcutor"
 	. "github.com/zxfonline/trace"
-	"golang.org/x/net/trace"
 )
 
 var (
 	MAXN_RETRY_TIMES               = 60
 	clientFLogger    *golog.Logger = golog.New("ConnectClientFactory")
-	serverLogger     *golog.Logger = golog.New("TCP_SERVICE")
+	serverLogger     *golog.Logger = golog.New("TcpService")
 )
 
 /**

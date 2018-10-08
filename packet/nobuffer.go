@@ -15,9 +15,9 @@ import (
 	"sync/atomic"
 
 	"github.com/zxfonline/buffpool"
+	trace "github.com/zxfonline/golangtrace"
 	"github.com/zxfonline/timefix"
 	. "github.com/zxfonline/trace"
-	"golang.org/x/net/trace"
 )
 
 //消息唯一id生成器

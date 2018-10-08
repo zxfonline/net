@@ -15,10 +15,10 @@ import (
 	"context"
 
 	"github.com/zxfonline/chanutil"
+	trace "github.com/zxfonline/golangtrace"
 	. "github.com/zxfonline/net/conn"
 	. "github.com/zxfonline/net/packet"
 	"github.com/zxfonline/taskexcutor"
-	"golang.org/x/net/trace"
 )
 
 //服务器结构体

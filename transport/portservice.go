@@ -38,7 +38,7 @@ type PortService struct {
 func (p *PortService) Transmit(session IoSession, data IoBuffer) {
 	if h, ok := p.cache[data.Port()]; ok {
 		if forbided := p.forbid[data.Port()]; forbided {
-			if !iptable.IsTrustedIP(session.RemoteIP(), true) {
+			if !iptable.IsTrustedIP1(session.RemoteIP()) {
 				panic(gerror.NewError(gerror.SERVER_CDATA_ERROR, fmt.Sprintf("transmit forbid handler,ip:%s,port:%d", session.RemoteIP(), data.Port())))
 				return
 			}
