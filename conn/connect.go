@@ -20,9 +20,7 @@ import (
 	"github.com/zxfonline/timefix"
 )
 
-var (
-	connLogger = golog.New("Connect")
-)
+var logger *golog.Logger = golog.New("Connect")
 
 //构建tcp连接
 func CreateConnect(wg *sync.WaitGroup, conn net.Conn, ChanReadSize, ChanSendSize, DeadlineSecond, ReadBufMaxSize uint) *Connect {
@@ -39,7 +37,7 @@ func CreateConnect(wg *sync.WaitGroup, conn net.Conn, ChanReadSize, ChanSendSize
 	c.ChanSendSize = ChanSendSize
 	c.DeadlineSecond = DeadlineSecond
 	c.bufMaxSize = ReadBufMaxSize
-	connLogger.Debugf("CREATE %+v", c)
+	logger.Debugf("CREATE %+v", c)
 	return c
 }
 
@@ -103,7 +101,7 @@ func (c *Connect) transfer(out interface{}) {
 	defer c.recoverClose()
 	select {
 	case <-c.stopD: //连接关闭
-		connLogger.Debugf("write data to closed connect,data=%+v,conn=%+v", out, c)
+		logger.Debugf("write data to closed connect,data=%+v,conn=%+v", out, c)
 	default:
 		switch v := out.(type) {
 		case IoBuffer:
@@ -217,7 +215,7 @@ func (c *Connect) openCheck() (ok bool) {
 	defer c.recoverClose()
 	defer func() {
 		if !ok {
-			connLogger.Warnf("INIT FALSE %+v", c)
+			logger.Warnf("INIT FALSE %+v", c)
 			c.Close()
 		}
 	}()
@@ -228,7 +226,7 @@ func (c *Connect) openCheck() (ok bool) {
 //tcp连接初始化
 func (c *Connect) Open(parent context.Context, msgExcutor taskexcutor.Excutor, cid int64, msgProcessor MsgHandler, ioc func(io.ReadWriter, IoSession) MsgReadWriter, iofilterRegister func(IoSession) IoFilterChain, mutilMsg bool) (ok bool) {
 	c.initOnce.Do(func() {
-		connLogger.Debugf("INITING %+v", c)
+		logger.Debugf("INITING %+v", c)
 		c.wg.Add(1)
 		c.filter = iofilterRegister(c)
 		next := c.openCheck()
@@ -262,7 +260,7 @@ func (c *Connect) Open(parent context.Context, msgExcutor taskexcutor.Excutor, c
 
 		defer c.recoverClose()
 		c.filter.SessionOpened(c)
-		connLogger.Debugf("INITED %+v", c)
+		logger.Debugf("INITED %+v", c)
 		ok = true
 	})
 	return
@@ -281,7 +279,7 @@ func (c *Connect) monitor(ctx context.Context) {
 	defer c.Close()
 	defer func() {
 		if e := recover(); e != nil {
-			connLogger.Debugf("recover error:%v,conn=%+v", e, c)
+			logger.Debugf("recover error:%v,conn=%+v", e, c)
 		}
 	}()
 	for q := false; !q; {
@@ -298,7 +296,7 @@ func (c *Connect) receivingQueue(ctx context.Context, msgExcutor taskexcutor.Exc
 	defer c.Close()
 	defer func() {
 		if e := recover(); e != nil {
-			connLogger.Debugf("recover error:%v,conn=%+v", e, c)
+			logger.Debugf("recover error:%v,conn=%+v", e, c)
 		}
 	}()
 	for q := false; !q; {
@@ -329,7 +327,7 @@ func (c *Connect) receivingMutil(ctx context.Context, msgExcutor taskexcutor.Exc
 	defer c.Close()
 	defer func() {
 		if e := recover(); e != nil {
-			connLogger.Debugf("recover error:%v,conn=%+v", e, c)
+			logger.Debugf("recover error:%v,conn=%+v", e, c)
 		}
 	}()
 	for q := false; !q; {
@@ -354,9 +352,9 @@ func (c *Connect) receivingMutil(ctx context.Context, msgExcutor taskexcutor.Exc
 func (c *Connect) recoverClose() {
 	if e := recover(); e != nil {
 		if e == io.EOF {
-			connLogger.Debugf("recover error:%v,conn=%+v", e, c)
+			logger.Debugf("recover error:%v,conn=%+v", e, c)
 		} else {
-			connLogger.Warnf("recover error:%v,conn=%+v", e, c)
+			logger.Warnf("recover error:%v,conn=%+v", e, c)
 		}
 		c.Close()
 	}
@@ -364,14 +362,14 @@ func (c *Connect) recoverClose() {
 
 func (c *Connect) recoverLog() {
 	if e := recover(); e != nil {
-		connLogger.Warnf("recover error:%v,conn=%+v", e, c)
+		logger.Warnf("recover error:%v,conn=%+v", e, c)
 	}
 }
 
 //shutdown.StopNotifier.Close()
 func (c *Connect) Close() {
 	c.closeOnce.Do(func() {
-		connLogger.Debugf("STOPING %+v", c)
+		logger.Debugf("STOPING %+v", c)
 		if c.quitF != nil {
 			c.quitF()
 		}
@@ -388,7 +386,7 @@ func (c *Connect) Close() {
 			}
 		}
 		defer func() {
-			connLogger.Debugf("STOPED %+v", c)
+			logger.Debugf("STOPED %+v", c)
 			c.serviceExcutor = nil
 			c.wg.Done()
 		}()
@@ -432,6 +430,6 @@ func (c *Connect) RemoteIP() string {
 func (c *Connect) Write(out interface{}) {
 	err := c.sender.Write(out)
 	if err != nil {
-		connLogger.Debugf("write data to connect sender error=%v,data=%+v,conn=%+v", err, out, c)
+		logger.Debugf("write data to connect sender error=%v,data=%+v,conn=%+v", err, out, c)
 	}
 }
