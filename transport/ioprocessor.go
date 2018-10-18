@@ -75,7 +75,7 @@ func (rw *msgRWIO) ReadMsg() (data IoBuffer) {
 	data.SetRcvPort(port)
 	data.SetRcvt(timefix.NanosTime())
 	if EnableTracing {
-		data.RegistTraceInfo(trace.New(fmt.Sprintf("%s.port_%d", rw.familyhead, t), "buffer"))
+		data.RegistTraceInfo(trace.New(fmt.Sprintf("%s.port_%d", rw.familyhead, t), "buffer", false))
 	}
 	return
 }
