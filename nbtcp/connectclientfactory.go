@@ -67,7 +67,7 @@ func (s *ConnectClientFactory) Start(msgExcutor taskexcutor.Excutor, timeout tim
 	s.wg.Add(1)
 	var ctx context.Context
 	if EnableTracing {
-		s.tr = trace.New("connectfactory", "trace")
+		s.tr = trace.New("connectfactory", "trace", false)
 	}
 	ctx, s.quitF = context.WithCancel(context.Background())
 	go s.working(ctx, msgExcutor, timeout, mutilMsg)
