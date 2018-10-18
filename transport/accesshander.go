@@ -302,7 +302,7 @@ func (e *entry) asyncAccess(data IoBuffer, timeout time.Duration) {
 		data.SetRcvPort(port)
 		data.SetRcvt(timefix.NanosTime())
 		if EnableTracing {
-			data.RegistTraceInfo(trace.New(fmt.Sprintf("async_callback.port_%d", port), "buffer"))
+			data.RegistTraceInfo(trace.New(fmt.Sprintf("async_callback.port_%d", port), "buffer", false))
 		}
 
 		h.lock.Lock()
